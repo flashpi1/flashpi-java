@@ -50,6 +50,20 @@ listed so they can be confirmed or changed before 1.0.
   - Exceptions are unchecked: `FlashpiException extends RuntimeException`.
   - Central publishes a version as soon as it validates it (`publishingType=AUTOMATIC`): the
     approval of the `maven-central` environment is the only gate.
+- **Answers of 2026-11-14, as recommended.**
+  - **Reading the API's answers.** Leniently: a member whose JSON does not fit its type is kept as
+    an additional property (its getter returns null) instead of failing the whole answer, so an
+    older SDK keeps working when the API changes a member, as Python's dictionaries do. The same
+    applies to error bodies (so a document is recovered from `documentId` whatever the other
+    members hold, and `getProblem()` is null only for an answer without Problem Details) and to
+    webhooks. A model read with a mapper of your own is strict: JSON that does not fit fails with
+    its path (`$.items[0].taxes[0].type`). The SDK's mapper never quotes the source in its errors
+    (Jackson did before 2.16), so an unreadable answer's stack trace shows no secret.
+  - **Spring Boot 4.** It uses Jackson 3, whose annotations are in another package, so its
+    `ObjectMapper` does not know the models; the SDK itself works there with its own Jackson 2,
+    and the READMEs tell how to convert a model with a Jackson 2 mapper. Support for Jackson 3
+    mappers would need Java 17 code: it will come as a module of its own only when a customer asks
+    for it.
 
 ### Chosen while porting (to confirm)
 
@@ -118,18 +132,6 @@ listed so they can be confirmed or changed before 1.0.
   `ProblemDetails.status`, the webhook attempts), which the API could declare as `integer`.
   Amounts stay text, as in the contract: `BigDecimal` would need a `format: decimal` there. A
   `date-time` without an offset is read as UTC.
-- **Reading the API's answers.** Leniently: a member whose JSON does not fit its type is kept as an
-  additional property (its getter returns null) instead of failing the whole answer, so an older
-  SDK keeps working when the API changes a member, as Python's dictionaries do. The same applies to
-  error bodies (so a document is recovered from `documentId` whatever the other members hold, and
-  `getProblem()` is null only for an answer without Problem Details) and to webhooks. A model read
-  with a mapper of your own is strict: JSON that does not fit fails with its path
-  (`$.items[0].taxes[0].type`). The SDK's mapper never quotes the source in its errors (Jackson
-  did before 2.16), so an unreadable answer's stack trace shows no secret.
-- **Spring Boot 4.** It uses Jackson 3, whose annotations are in another package, so its
-  `ObjectMapper` does not know the models; the SDK itself works there with its own Jackson 2. The
-  READMEs tell how to convert a model with a Jackson 2 mapper. Support for Jackson 3 mappers would
-  need Java 17 code and a module of its own: an open question for the owner.
 - **Enums.** Inline enums with the same values share one Java enum. One found in a single place is
   named after it (schema and member); a shared one needs an entry of `SHARED_ENUMS`, which names it
   and lists all its places (`Environment`, `DocumentType`, `DocumentStatus`, `EventType`,
