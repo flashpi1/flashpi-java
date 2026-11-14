@@ -23,10 +23,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: release
-  cancel-in-progress: false
-
 env:
   MAVEN_ARGS: --batch-mode --no-transfer-progress
 
@@ -34,6 +30,11 @@ jobs:
   release-please:
     name: Release PR
     runs-on: ubuntu-24.04
+    # One release-please at a time. Only this job: a publish waiting for its approval (up to 30
+    # days) must not hold back the release PR of later pushes.
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     # release-please uses the App's token, not GITHUB_TOKEN.
     permissions: {}
     outputs:
@@ -131,6 +132,9 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    concurrency:
+      group: publish
+      cancel-in-progress: false
     environment:
       name: maven-central
       url: https://central.sonatype.com/artifact/ec.com.flashpi/flashpi-java
@@ -200,18 +204,30 @@ jobs:
           token="$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 | tr -d '\n')"
           echo "::add-mask::$token"
           auth="$(mktemp)"
-          trap 'rm -f "$auth"' EXIT
+          answer="$(mktemp)"
+          trap 'rm -f "$auth" "$answer"' EXIT
           printf 'header = "Authorization: Bearer %s"\n' "$token" > "$auth"
           # AUTOMATIC: Central publishes the version once it validates the bundle (the owner's
-          # approval of the maven-central environment is the gate).
-          deployment="$(curl --fail-with-body --silent --show-error --config "$auth" \
+          # approval of the maven-central environment is the gate). The upload is never retried by
+          # itself: a second upload of the same version would be refused.
+          code="$(curl --silent --show-error --config "$auth" --output "$answer" --write-out '%{http_code}' \
             --form "bundle=@${BUNDLE_ZIP}" \
             "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=flashpi-java-${TAG#v}")"
+          if [ "$code" != 201 ] && [ "$code" != 200 ]; then
+            echo "::error::Central refused the upload (HTTP ${code}): $(cat "$answer")"
+            exit 1
+          fi
+          deployment="$(cat "$answer")"
           echo "Deployment ${deployment}"
+          state=UNKNOWN
           for attempt in $(seq 1 120); do
             sleep 15
-            status="$(curl --fail-with-body --silent --show-error --config "$auth" --request POST \
-              "https://central.sonatype.com/api/v1/publisher/status?id=${deployment}")"
+            # Reading the status is safe to repeat: retried on any error.
+            if ! status="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --config "$auth" \
+              --request POST "https://central.sonatype.com/api/v1/publisher/status?id=${deployment}")"; then
+              echo "${attempt}: could not read the status, trying again"
+              continue
+            fi
             state="$(printf '%s' "$status" | jq -r .deploymentState)"
             echo "${attempt}: ${state}"
             case "$state" in
@@ -222,5 +238,10 @@ jobs:
                 exit 1 ;;
             esac
           done
-          echo "::error::Central has not published deployment ${deployment} after 30 minutes: see https://central.sonatype.com/publishing/deployments"
+          if [ "$state" = PUBLISHING ]; then
+            # Validated and on its way: Central finishes it. Do not re-run this job.
+            echo "::warning::Deployment ${deployment} is still PUBLISHING after 30 minutes: Central finishes it; follow it at https://central.sonatype.com/publishing/deployments and do not re-run this job"
+            exit 0
+          fi
+          echo "::error::Central has not published deployment ${deployment} after 30 minutes (last state ${state}): see https://central.sonatype.com/publishing/deployments before re-running"
           exit 1

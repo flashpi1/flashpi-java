@@ -293,9 +293,7 @@
           <doclint>all,-missing</doclint>
           <failOnWarnings>true</failOnWarnings>
           <excludePackageNames>ec.com.flashpi.internal</excludePackageNames>
-          <links>
-            <link>https://docs.oracle.com/en/java/javase/11/docs/api/</link>
-          </links>
+          <!-- The Java SE links come from the plugin's own element list: the build fetches nothing. -->
         </configuration>
         <executions>
           <execution>

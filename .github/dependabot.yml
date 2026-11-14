@@ -13,9 +13,16 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Jackson, the only runtime dependency, as deps: (a release); the build and test tools as chore:.
     commit-message:
-      prefix: chore
+      prefix: deps
       prefix-development: chore
+    ignore:
+      # JUnit 6 and Maven 4 need Java 17: the SDK builds and tests on Java 11.
+      - dependency-name: org.junit:junit-bom
+        update-types: ['version-update:semver-major']
+      - dependency-name: org.apache.maven:apache-maven
+        update-types: ['version-update:semver-major']
     groups:
       # Jackson is the SDK's only dependency, kept apart so its updates are reviewed on their own.
       jackson:

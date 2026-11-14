@@ -13,7 +13,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request replaces its run; every run on main finishes.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   MAVEN_ARGS: --batch-mode --no-transfer-progress
@@ -86,7 +87,9 @@ jobs:
       - name: Test with Jackson 2.13.5
         run: |
           ./mvnw verify -Djackson.version=2.13.5
-          ./mvnw dependency:tree -Dincludes=com.fasterxml.jackson.core
+          ./mvnw dependency:tree -Djackson.version=2.13.5 -Dincludes=com.fasterxml.jackson.core \
+            | tee "$RUNNER_TEMP/tree.txt"
+          grep -q 'jackson-databind:jar:2.13.5' "$RUNNER_TEMP/tree.txt"
 
   kotlin:
     name: Kotlin README examples

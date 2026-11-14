@@ -57,8 +57,17 @@
   <!-- A whole number has no fraction: an exact comparison is the point. -->
   <Match>
     <Class name="ec.com.flashpi.models.Types"/>
-    <Method name="isWhole"/>
+    <Or>
+      <Method name="isWhole"/>
+      <Method name="write"/>
+    </Or>
     <Bug pattern="FE_FLOATING_POINT_EQUALITY"/>
+  </Match>
+  <!-- A request keeps its multipart body, which the engine clears once the call ends. -->
+  <Match>
+    <Class name="ec.com.flashpi.internal.RequestSpec$Builder"/>
+    <Method name="multipart"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
   <!-- The resources' base checks its engine; its subclasses are final and created by the client. -->
   <Match>
