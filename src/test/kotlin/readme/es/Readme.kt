@@ -3,6 +3,7 @@ package readme.es
 import ec.com.flashpi.Flashpi
 import ec.com.flashpi.models.CreateInvoice
 import ec.com.flashpi.models.DocumentItem
+import ec.com.flashpi.models.DocumentOptions
 import ec.com.flashpi.models.DocumentParty
 import ec.com.flashpi.models.DocumentPayment
 import ec.com.flashpi.models.DocumentStatus
@@ -31,6 +32,7 @@ fun main() {
                     ),
                 )
                 .payments(listOf(DocumentPayment.builder().method(PaymentMethod.CASH).amount("1.15").build()))
+                .options(DocumentOptions.builder().waitForAuthorization(true).build())
                 .build(),
         )
 

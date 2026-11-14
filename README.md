@@ -11,14 +11,15 @@ Ecuador, para Java y Kotlin.
   emisores con establecimientos, puntos de emisión y certificados .p12, webhooks y eventos.
 - Modelos generados del documento OpenAPI de la API, con getters tipados y builders
   (`CreateInvoice.builder()`), enums y fechas de `java.time`: tu IDE conoce cada campo.
-- Reintentos seguros: cada emisión lleva un `Idempotency-Key`, así un reintento nunca emite dos
-  veces.
+- Reintentos seguros: cada emisión lleva un `Idempotency-Key`, así que un reintento nunca emite
+  dos veces.
 - Excepciones tipadas (RFC 9457) con su `code`, los errores por campo y el `requestId`.
 - Paginación automática con `for` y `Stream`.
 - Verificación de firmas de webhooks (Standard Webhooks) para Spring Boot, servlets o cualquier
   framework.
 - Java 11 o superior, y Kotlin. Una sola dependencia: Jackson 2 (`jackson-databind`, desde la
-  2.13), que Spring Boot ya trae.
+  2.13), la que ya traen Spring Boot 2.7 y 3. Con Spring Boot 4, que usa Jackson 3, el SDK trae su
+  propio Jackson 2, que convive con él (ver [Spring Boot 4](#spring-boot-4)).
 
 ## Instalación
 
@@ -99,6 +100,8 @@ perder decimales; las fechas son `LocalDate` y `OffsetDateTime`. Un valor que es
 aún no conoce se lee como `UNKNOWN` en los enums, y un campo nuevo queda en
 `getAdditionalProperties()`.
 
+Los modelos se leen y escriben con cualquier `ObjectMapper` de Jackson 2, sin módulos extra.
+
 Con el **emisor demo** puedes emitir en pruebas sin subir un certificado: su id está en el
 Resumen de la consola (hasta 50 comprobantes al día). Más en
 [Sandbox y emisor demo](https://flashpi.com.ec/docs/sandbox/).
@@ -116,6 +119,7 @@ El mismo SDK sirve en Kotlin: los getters se leen como propiedades y los enums f
 import ec.com.flashpi.Flashpi
 import ec.com.flashpi.models.CreateInvoice
 import ec.com.flashpi.models.DocumentItem
+import ec.com.flashpi.models.DocumentOptions
 import ec.com.flashpi.models.DocumentParty
 import ec.com.flashpi.models.DocumentPayment
 import ec.com.flashpi.models.DocumentStatus
@@ -144,6 +148,7 @@ fun main() {
                     ),
                 )
                 .payments(listOf(DocumentPayment.builder().method(PaymentMethod.CASH).amount("1.15").build()))
+                .options(DocumentOptions.builder().waitForAuthorization(true).build())
                 .build(),
         )
 
@@ -171,8 +176,8 @@ fun main() {
 | Guía de remisión      | `flashpi.waybills().create(body)`              |
 | Retención             | `flashpi.withholdings().create(body)`          |
 
-Todos devuelven el documento (`Document`). Por defecto la respuesta llega enseguida con el
-estado `PROCESSING` y el resultado del SRI llega por webhook. Con
+Todos devuelven el documento (`Document`). Por defecto la API responde enseguida con el estado
+`PROCESSING` y el resultado del SRI llega por webhook. Con
 `DocumentOptions.builder().waitForAuthorization(true)` la API espera la respuesta del SRI (15 s
 por defecto, hasta 30 s con `waitTimeoutSeconds`) y devuelve `AUTHORIZED`, `REJECTED` o
 `FAILED`; si el SRI tarda más, devuelve `PROCESSING` o `PENDING_SRI` y el documento sigue su
@@ -192,7 +197,7 @@ DocumentXml xml = flashpi.documents().xml(invoice.getId()); // getKind(): AUTHOR
 byte[] pdf = flashpi.documents().pdf(invoice.getId()); // el RIDE
 Files.write(Path.of(invoice.getAccessKey() + ".pdf"), pdf);
 
-flashpi.documents().sendEmail(invoice.getId()); // reenvía RIDE y XML al correo del comprador
+flashpi.documents().sendEmail(invoice.getId()); // envía RIDE y XML al correo del documento
 ```
 
 ## Listas y paginación
@@ -225,8 +230,8 @@ if (page.hasNextPage()) {
 
 ## Errores
 
-Cada error de la API es una subclase de `ApiException` según su estado HTTP; todas son
-excepciones no verificadas. Decide según `getCode()`, que es estable y en inglés; el mensaje
+Cada error de la API es una `ApiException`, con una subclase para cada estado HTTP frecuente;
+todas son excepciones no verificadas. Decide según `getCode()`, que es estable y en inglés; el mensaje
 sigue el idioma pedido.
 
 ```java
@@ -258,7 +263,8 @@ try {
 | `ConflictException`            | 409    | `sequential_already_used`, `ride_not_available`             |
 | `UnprocessableEntityException` | 422    | `validation_failed`, `total_mismatch`                       |
 | `RateLimitException`           | 429    | `demo_issuer_quota_exceeded`, `account_email_limit_reached` |
-| `InternalServerException`      | 5xx    | `internal_error`                                            |
+| `InternalServerException`      | 5xx    | `internal_error`, `demo_issuer_unavailable`                 |
+| `ApiException`                 | otros  | `payload_too_large` (413), `unsupported_media_type` (415)   |
 | `ApiConnectionException`       | —      | sin respuesta (red); `ApiTimeoutException` si se agotó el plazo |
 
 Todas están en `ec.com.flashpi.exceptions` y derivan de `FlashpiException`. Algunos errores traen
@@ -268,15 +274,16 @@ datos extra en `getProblem()`, por ejemplo `getDocumentId()`, `getLimit()`, `get
 
 ## Reintentos e idempotencia
 
-El SDK reintenta hasta 2 veces, con espera creciente, los errores de red, los tiempos agotados,
-las respuestas 408, 429 (si piden esperar 60 s o menos) y 5xx. Cada POST lleva un
-`Idempotency-Key` que se repite en sus reintentos, así que la API nunca emite dos veces:
+El SDK reintenta hasta 2 veces, con espera creciente, los errores de red, los tiempos agotados y
+las respuestas 408, 429 y 5xx (salvo 501 y `demo_issuer_unavailable`). Si la respuesta pide esperar
+más de 60 s (`Retry-After`), no reintenta y lanza el error. Cada POST lleva un `Idempotency-Key`
+que se repite en sus reintentos, así que la API nunca emite dos veces:
 
 - Si un reintento descubre que el primer intento sí creó el documento, el SDK devuelve ese
   documento.
 - Si el primer intento sigue en curso en la API (por ejemplo, se cortó la conexión mientras
-  esperaba al SRI), el SDK espera a que termine con la misma clave, hasta el tiempo límite de la
-  llamada, sin gastar reintentos.
+  esperaba al SRI), el SDK espera a que termine con la misma clave, sin gastar reintentos, mientras
+  no haya pasado el `timeout` desde el inicio de la llamada; después siguen los reintentos normales.
 
 Para usar tu propia clave (por ejemplo el id de tu pedido), pásala en las opciones de la llamada:
 
@@ -308,7 +315,7 @@ try {
 ```
 
 Si interrumpes el hilo de una llamada, el SDK deja de esperar, lanza una `FlashpiException` con
-la clave y conserva la interrupción del hilo.
+la clave y deja marcado el hilo como interrumpido.
 
 Los límites diarios (como la cuota del emisor demo) no se reintentan: se lanzan como
 `RateLimitException` con `getRetryAfter()`.
@@ -355,7 +362,7 @@ class FlashpiWebhookController {
       return ResponseEntity.ok(Map.of("challenge", challenge));
     }
     if (event instanceof DocumentEvent) {
-      DocumentEvent document = (DocumentEvent) event; // getData() es el documento
+      DocumentEvent document = (DocumentEvent) event; // getData() es el documento (null en modo thin)
       if (document.getType() == DocumentEventType.INVOICE_AUTHORIZED) {
         System.out.println("Autorizada " + document.getData().getAccessKey());
       } else if (document.getType() == DocumentEventType.INVOICE_REJECTED) {
@@ -368,8 +375,9 @@ class FlashpiWebhookController {
 ```
 
 Con un servlet, pasa los encabezados como `request::getHeader`:
-`webhooks.unwrap(body, request::getHeader, secret)`. Los encabezados también pueden ser cualquier
-`Map` con valores de texto o listas de textos.
+`webhooks.unwrap(body, request::getHeader, secret)`; con el `HttpHeaders` de Spring,
+`headers::getFirst`. Los encabezados también pueden ser cualquier `Map` con valores de texto o
+listas de textos.
 
 Guarda el `getId()` del evento y descarta los repetidos: un evento puede llegar más de una vez.
 Durante una rotación del secreto, Flashpi firma con el nuevo y el anterior, así que cualquiera de
@@ -433,7 +441,10 @@ if (onboarding.getExistingIssuer() != null) {
               onboarding.getId(),
               CompleteIssuerOnboarding.builder()
                   .legalName(prefill.getLegalName() != null ? prefill.getLegalName() : "MI EMPRESA S.A.")
-                  .headOfficeAddress(prefill.getHeadOfficeAddress())
+                  .headOfficeAddress(
+                      prefill.getHeadOfficeAddress() != null
+                          ? prefill.getHeadOfficeAddress()
+                          : "Av. Amazonas N24-100, Quito")
                   .taxProfile(
                       IssuerTaxProfileInput.builder()
                           .keepsAccounting(Boolean.TRUE.equals(tax.getKeepsAccounting()))
@@ -528,6 +539,14 @@ Flashpi flashpi =
                 .build())
         .build();
 ```
+
+## Spring Boot 4
+
+El SDK funciona con Spring Boot 2.7, 3 y 4. Spring Boot 4 usa Jackson 3, cuyo `ObjectMapper` no
+conoce los modelos del SDK (están hechos para Jackson 2): no recibas un modelo como `@RequestBody`
+ni lo devuelvas tal cual desde un controlador. Conviértelo con un `ObjectMapper` de Jackson 2
+(`new ObjectMapper().writeValueAsString(document)`), o activa el soporte de Jackson 2 de Spring
+Boot 4 (`spring-boot-jackson2`).
 
 ## Solo en el servidor
 

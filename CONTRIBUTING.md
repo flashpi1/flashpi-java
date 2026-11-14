@@ -68,6 +68,10 @@ java scripts/OpenApi.java generate  # regenerate from the committed copy
 
 The `OpenAPI sync` workflow does this every day and opens a pull request when the contract
 changes. New operations or fields may need a method or a hand-written type in `src/main/java`.
+When the generation fails because an enum that several places share changed, update
+`SHARED_ENUMS` in the generator: keep each public enum's name where you can, since renaming one
+breaks the code of the SDK's users. `GeneratorTest` runs the generator on contracts it must refuse
+or escape.
 
 ## Commits and releases
 

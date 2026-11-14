@@ -11,12 +11,14 @@ SRI, for Java and Kotlin.
   their establishments, emission points and .p12 certificates, webhooks and events.
 - Models generated from the API's OpenAPI document, with typed getters and builders
   (`CreateInvoice.builder()`), enums and `java.time` dates: your IDE knows every field.
-- Safe retries: every issue carries an `Idempotency-Key`, so a retry never issues twice.
+- Safe retries: every document you issue carries an `Idempotency-Key`, so a retry never issues it
+  twice.
 - Typed exceptions (RFC 9457) with their `code`, field errors and `requestId`.
 - Automatic pagination with `for` and `Stream`.
 - Webhook signature verification (Standard Webhooks) for Spring Boot, servlets or any framework.
 - Java 11 or later, and Kotlin. One dependency: Jackson 2 (`jackson-databind`, 2.13 or later),
-  which Spring Boot already brings.
+  which Spring Boot 2.7 and 3 already bring. With Spring Boot 4, which uses Jackson 3, the SDK
+  brings its own Jackson 2, which lives alongside it (see [Spring Boot 4](#spring-boot-4)).
 
 ## Installation
 
@@ -92,9 +94,11 @@ System.out.println(invoice.getStatus() + " " + invoice.getAccessKey());
 ```
 
 The models are in `ec.com.flashpi.models` and use the API's names (`getAccessKey()`,
-`issuerId(...)`). Amounts and quantities are **text** (`"1.15"`), never numbers, so no decimal is
-lost; dates are `LocalDate` and `OffsetDateTime`. A value this version of the SDK does not know
+`issuerId(...)`). Amounts and quantities are **strings** (`"1.15"`), never numbers, so no precision
+is lost; dates are `LocalDate` and `OffsetDateTime`. A value this version of the SDK does not know
 yet reads as `UNKNOWN` in the enums, and a new field is kept in `getAdditionalProperties()`.
+
+The models are read and written by any Jackson 2 `ObjectMapper`, with no extra module.
 
 With the **demo issuer** you can issue in test mode without uploading a certificate: its id is on
 the console's Overview (up to 50 documents a day). More in
@@ -106,12 +110,13 @@ a Spring bean). Close it with `flashpi.close()` or use it in a
 
 ## Kotlin
 
-The same SDK serves Kotlin: getters read as properties and enums work with `when`.
+The same SDK works from Kotlin: getters read as properties and enums work with `when`.
 
 ```kotlin
 import ec.com.flashpi.Flashpi
 import ec.com.flashpi.models.CreateInvoice
 import ec.com.flashpi.models.DocumentItem
+import ec.com.flashpi.models.DocumentOptions
 import ec.com.flashpi.models.DocumentParty
 import ec.com.flashpi.models.DocumentPayment
 import ec.com.flashpi.models.DocumentStatus
@@ -140,6 +145,7 @@ fun main() {
                     ),
                 )
                 .payments(listOf(DocumentPayment.builder().method(PaymentMethod.CASH).amount("1.15").build()))
+                .options(DocumentOptions.builder().waitForAuthorization(true).build())
                 .build(),
         )
 
@@ -167,11 +173,12 @@ fun main() {
 | Waybill (guía de remisión)                   | `flashpi.waybills().create(body)`            |
 | Withholding receipt (retención)              | `flashpi.withholdings().create(body)`        |
 
-All of them return the document (`Document`). By default the answer comes right away with the
+All of them return the document (`Document`). By default the API answers right away with the
 status `PROCESSING`, and the SRI's outcome arrives by webhook. With
 `DocumentOptions.builder().waitForAuthorization(true)` the API waits for the SRI (15 s by
 default, up to 30 s with `waitTimeoutSeconds`) and returns `AUTHORIZED`, `REJECTED` or `FAILED`;
-if the SRI takes longer, it returns `PROCESSING` or `PENDING_SRI` and the document goes on.
+if the SRI takes longer, it returns `PROCESSING` or `PENDING_SRI` and processing continues in the
+background.
 
 ## Documents
 
@@ -187,7 +194,7 @@ DocumentXml xml = flashpi.documents().xml(invoice.getId()); // getKind(): AUTHOR
 byte[] pdf = flashpi.documents().pdf(invoice.getId()); // the RIDE
 Files.write(Path.of(invoice.getAccessKey() + ".pdf"), pdf);
 
-flashpi.documents().sendEmail(invoice.getId()); // emails the RIDE and the XML to the buyer again
+flashpi.documents().sendEmail(invoice.getId()); // emails the RIDE and the XML to the document's address
 ```
 
 ## Lists and pagination
@@ -219,8 +226,8 @@ if (page.hasNextPage()) {
 
 ## Errors
 
-Each API error is a subclass of `ApiException` by its HTTP status; all of them are unchecked
-exceptions. Branch on `getCode()`, which is stable and in English; the message follows the
+Every API error is an `ApiException`, with a subclass for each common HTTP status; all of them are
+unchecked exceptions. Branch on `getCode()`, which is stable and in English; the message follows the
 requested language.
 
 ```java
@@ -252,7 +259,8 @@ try {
 | `ConflictException`            | 409    | `sequential_already_used`, `ride_not_available`             |
 | `UnprocessableEntityException` | 422    | `validation_failed`, `total_mismatch`                       |
 | `RateLimitException`           | 429    | `demo_issuer_quota_exceeded`, `account_email_limit_reached` |
-| `InternalServerException`      | 5xx    | `internal_error`                                            |
+| `InternalServerException`      | 5xx    | `internal_error`, `demo_issuer_unavailable`                 |
+| `ApiException`                 | others | `payload_too_large` (413), `unsupported_media_type` (415)   |
 | `ApiConnectionException`       | —      | no answer (network); `ApiTimeoutException` when it timed out |
 
 All of them are in `ec.com.flashpi.exceptions` and extend `FlashpiException`. Some errors carry
@@ -261,15 +269,16 @@ extra data in `getProblem()`, for example `getDocumentId()`, `getLimit()`, `getR
 
 ## Retries and idempotency
 
-The SDK retries up to 2 times, with a growing wait, network errors, timeouts, and 408, 429 (when
-they ask to wait 60 s or less) and 5xx answers. Every POST carries an `Idempotency-Key` that its
-retries repeat, so the API never issues twice:
+The SDK retries network errors, timeouts and 408, 429 and 5xx answers (except 501 and
+`demo_issuer_unavailable`) up to 2 times, with exponential backoff. When an answer asks to wait more
+than 60 s (`Retry-After`), it is not retried but thrown. Every POST carries an `Idempotency-Key`
+that its retries repeat, so the API never issues twice:
 
 - When a retry finds that the first attempt did create the document, the SDK returns that
   document.
 - When the first attempt is still running on the API (for example, the connection dropped while
-  it waited for the SRI), the SDK waits for it with the same key, up to the call's time limit,
-  without spending retries.
+  it waited for the SRI), the SDK waits for it with the same key, without spending retries, while
+  less than the `timeout` has passed since the call started; after that the normal retries apply.
 
 To use your own key (for example your order's id), pass it in the call's options:
 
@@ -281,7 +290,7 @@ flashpi
     .create(body, RequestOptions.builder().idempotencyKey("order-" + order.getId()).build());
 ```
 
-If an issue fails anyway, the error (a `FlashpiException`) carries the key it used in
+If issuing still fails, the error (a `FlashpiException`) carries the key it used in
 `getIdempotencyKey()`. Trying again with that key never issues a second document: within 24 hours
 the API returns the first answer; after that (or if the API lost the first attempt), the call
 fails with a 422 `idempotency_key_reused` whose `getProblem().getDocumentId()` is the document
@@ -301,7 +310,7 @@ try {
 ```
 
 If you interrupt a call's thread, the SDK stops waiting, throws a `FlashpiException` with the key
-and keeps the thread's interrupt.
+and preserves the thread's interrupted status.
 
 Daily limits (such as the demo issuer's quota) are not retried: they are thrown as
 `RateLimitException` with `getRetryAfter()`.
@@ -348,7 +357,7 @@ class FlashpiWebhookController {
       return ResponseEntity.ok(Map.of("challenge", challenge));
     }
     if (event instanceof DocumentEvent) {
-      DocumentEvent document = (DocumentEvent) event; // getData() is the document
+      DocumentEvent document = (DocumentEvent) event; // getData() is the document (null in thin mode)
       if (document.getType() == DocumentEventType.INVOICE_AUTHORIZED) {
         System.out.println("Authorized " + document.getData().getAccessKey());
       } else if (document.getType() == DocumentEventType.INVOICE_REJECTED) {
@@ -361,8 +370,8 @@ class FlashpiWebhookController {
 ```
 
 With a servlet, pass the headers as `request::getHeader`:
-`webhooks.unwrap(body, request::getHeader, secret)`. The headers can also be any `Map` whose values
-are text or lists of text.
+`webhooks.unwrap(body, request::getHeader, secret)`; with Spring's `HttpHeaders`,
+`headers::getFirst`. The headers can also be any `Map` whose values are text or lists of text.
 
 Keep the event's `getId()` and drop repeats: an event can arrive more than once. During a secret
 rotation Flashpi signs with the new secret and the previous one, so either works. An event of a
@@ -425,7 +434,10 @@ if (onboarding.getExistingIssuer() != null) {
               onboarding.getId(),
               CompleteIssuerOnboarding.builder()
                   .legalName(prefill.getLegalName() != null ? prefill.getLegalName() : "MY COMPANY S.A.")
-                  .headOfficeAddress(prefill.getHeadOfficeAddress())
+                  .headOfficeAddress(
+                      prefill.getHeadOfficeAddress() != null
+                          ? prefill.getHeadOfficeAddress()
+                          : "Av. Amazonas N24-100, Quito")
                   .taxProfile(
                       IssuerTaxProfileInput.builder()
                           .keepsAccounting(Boolean.TRUE.equals(tax.getKeepsAccounting()))
@@ -451,7 +463,7 @@ and sends the same bytes on every retry.
 To **renew an issuer's signature**, for test and live at once, run the same flow with the new
 .p12: Flashpi recognizes the RUC (`getExistingIssuer()`) and `complete()` without a body adds the
 certificate. `flashpi.issuers().certificates().upload(issuerId, upload)` instead uploads a
-certificate for the mode of the key you use only (test or live).
+certificate only for the mode of the key you use (test or live).
 
 ## Options
 
@@ -519,6 +531,14 @@ Flashpi flashpi =
                 .build())
         .build();
 ```
+
+## Spring Boot 4
+
+The SDK works with Spring Boot 2.7, 3 and 4. Spring Boot 4 uses Jackson 3, whose `ObjectMapper`
+does not know the SDK's models (they are made for Jackson 2): do not take a model as a
+`@RequestBody` or return one as it is from a controller. Convert it with a Jackson 2 `ObjectMapper`
+(`new ObjectMapper().writeValueAsString(document)`), or turn on Spring Boot 4's Jackson 2 support
+(`spring-boot-jackson2`).
 
 ## Servers only
 

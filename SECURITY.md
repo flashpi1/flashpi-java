@@ -10,10 +10,11 @@ For problems with the Flashpi API itself, use the same channel: we route them to
 
 ## Keeping your integration safe
 
-- Your API key (`fp_live_...`) is a secret: keep it on your server, in an environment variable
+- Your API keys (`fp_live_...` and `fp_test_...`: a test key can upload a certificate that also
+  signs live documents) are secrets: keep them on your server, in an environment variable
   such as `FLASHPI_API_KEY`, never in an Android app or other code that runs on your users'
-  devices. The SDK never shows it in `toString()` or in an exception.
-- Verify every webhook with `Webhooks.unwrap()` (or `flashpi.webhooks().unwrap()`) on the raw body
+  devices. The SDK never shows a key in `toString()` or in an exception.
+- Verify every webhook with `new Webhooks().unwrap(...)` (or `flashpi.webhooks().unwrap(...)`) on the raw body
   before you act on it, and deduplicate on its `id`.
 - If you pass your own `HttpClient`, build it with `followRedirects(HttpClient.Redirect.NEVER)`:
   the SDK refuses one that follows redirects, which would carry the API key to another host.
