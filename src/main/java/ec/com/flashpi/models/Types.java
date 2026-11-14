@@ -201,6 +201,30 @@ final class Types {
     return node == null || node.isNull() ? null : type.read(node, path);
   }
 
+  /**
+   * Whether the read running on this thread keeps members that do not fit (see ModelDeserializer).
+   */
+  private static final ThreadLocal<Boolean> LENIENT = new ThreadLocal<>();
+
+  static boolean lenient() {
+    return Boolean.TRUE.equals(LENIENT.get());
+  }
+
+  /** A read that is lenient or not, for its whole tree. */
+  static Object read(ValueType type, JsonNode node, String path, boolean lenient) {
+    Boolean previous = LENIENT.get();
+    LENIENT.set(lenient);
+    try {
+      return read(type, node, path);
+    } finally {
+      if (previous == null) {
+        LENIENT.remove();
+      } else {
+        LENIENT.set(previous);
+      }
+    }
+  }
+
   private static boolean isWhole(JsonNode node) {
     if (!node.isFloatingPointNumber()) {
       return false;
@@ -209,7 +233,10 @@ final class Types {
     return !Double.isInfinite(value) && value == Math.rint(value);
   }
 
-  /** Plain Java values of any JSON: LinkedHashMap, ArrayList, String, numbers, Boolean, null. */
+  /**
+   * Plain Java values of any JSON: unmodifiable maps (in order) and lists, String, numbers,
+   * Boolean, null.
+   */
   static Object plain(JsonNode node) {
     if (node == null || node.isNull()) {
       return null;
@@ -221,14 +248,14 @@ final class Types {
         Map.Entry<String, JsonNode> field = fields.next();
         values.put(field.getKey(), plain(field.getValue()));
       }
-      return values;
+      return Collections.unmodifiableMap(values);
     }
     if (node.isArray()) {
       List<Object> items = new ArrayList<>(node.size());
       for (JsonNode item : node) {
         items.add(plain(item));
       }
-      return items;
+      return Collections.unmodifiableList(items);
     }
     if (node.isTextual()) {
       return node.textValue();
@@ -246,6 +273,54 @@ final class Types {
       return node.isBigDecimal() ? node.decimalValue() : node.doubleValue();
     }
     return node.toString();
+  }
+
+  /**
+   * A caller's value for an additional property, with its maps and lists copied as unmodifiable
+   * ones, all the way down, so a model cannot change once built.
+   */
+  static Object freeze(Object value) {
+    if (value instanceof Map) {
+      Map<String, Object> copy = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+        copy.put(String.valueOf(entry.getKey()), freeze(entry.getValue()));
+      }
+      return Collections.unmodifiableMap(copy);
+    }
+    if (value instanceof List) {
+      List<Object> copy = new ArrayList<>();
+      for (Object item : (List<?>) value) {
+        copy.add(freeze(item));
+      }
+      return Collections.unmodifiableList(copy);
+    }
+    return value;
+  }
+
+  /** Names of members that hold secrets: toString() never shows them. */
+  static final java.util.regex.Pattern SECRET_NAME =
+      java.util.regex.Pattern.compile("(?i).*(secret|password|token).*");
+
+  /** A value as toString() shows it: the values of secret-looking keys of its maps as ***. */
+  static Object redact(Object value) {
+    if (value instanceof Map) {
+      Map<Object, Object> shown = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+        boolean secret =
+            entry.getValue() != null
+                && SECRET_NAME.matcher(String.valueOf(entry.getKey())).matches();
+        shown.put(entry.getKey(), secret ? "***" : redact(entry.getValue()));
+      }
+      return shown;
+    }
+    if (value instanceof List) {
+      List<Object> shown = new ArrayList<>();
+      for (Object item : (List<?>) value) {
+        shown.add(redact(item));
+      }
+      return shown;
+    }
+    return value;
   }
 
   // Getters and builders.
@@ -310,7 +385,13 @@ final class Types {
         throw JsonMappingException.from(
             provider, "NaN and infinite numbers cannot be sent as JSON");
       }
-      generator.writeNumber(number);
+      // A whole number (the contract declares some, such as Document.sequential, as numbers) is
+      // written as the API sent it: 123, not 123.0.
+      if (number == Math.rint(number) && Math.abs(number) < 0x1p53) {
+        generator.writeNumber((long) number);
+      } else {
+        generator.writeNumber(number);
+      }
     } else if (value instanceof Boolean) {
       generator.writeBoolean((Boolean) value);
     } else if (value instanceof LocalDate) {
@@ -341,6 +422,13 @@ final class Types {
   static void writeModel(FlashpiModel model, JsonGenerator generator, SerializerProvider provider)
       throws IOException {
     generator.writeStartObject();
+    writeMembers(model, generator, provider);
+    generator.writeEndObject();
+  }
+
+  /** The members of a model, then its additional properties, inside an object already started. */
+  static void writeMembers(FlashpiModel model, JsonGenerator generator, SerializerProvider provider)
+      throws IOException {
     for (Map.Entry<String, Object> member : model.members().entrySet()) {
       generator.writeFieldName(member.getKey());
       write(member.getValue(), generator, provider);
@@ -349,6 +437,5 @@ final class Types {
       generator.writeFieldName(member.getKey());
       write(member.getValue(), generator, provider);
     }
-    generator.writeEndObject();
   }
 }

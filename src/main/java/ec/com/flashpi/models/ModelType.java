@@ -43,6 +43,14 @@ final class ModelType implements ValueType {
 
   @Override
   public Object read(JsonNode node, String path) {
+    return read(node, path, Types.lenient());
+  }
+
+  /**
+   * The model of a JSON object. Lenient: a member whose JSON does not fit its type is kept as an
+   * additional property instead of failing the read.
+   */
+  Object read(JsonNode node, String path, boolean lenient) {
     if (!node.isObject()) {
       throw new ModelException(path, "an object (" + name() + ")");
     }
@@ -55,8 +63,15 @@ final class ModelType implements ValueType {
       String where = path + "." + field.getKey();
       if (member == null) {
         additional.put(field.getKey(), Types.plain(field.getValue()));
-      } else {
+        continue;
+      }
+      try {
         values.put(field.getKey(), Types.read(member.type, field.getValue(), where));
+      } catch (ModelException error) {
+        if (!lenient) {
+          throw error;
+        }
+        additional.put(field.getKey(), Types.plain(field.getValue()));
       }
     }
     return create(Collections.unmodifiableMap(values), additional);

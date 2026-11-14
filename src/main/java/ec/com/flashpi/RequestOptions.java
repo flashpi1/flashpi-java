@@ -188,7 +188,8 @@ public final class RequestOptions {
     }
 
     /**
-     * The retries after network errors, timeouts, 429 and 5xx, instead of the client's.
+     * The retries after network errors, timeouts, 408, 429 and 5xx (not 501 or {@code
+     * demo_issuer_unavailable}), instead of the client's.
      *
      * @param maxRetries 0 or more (0 turns them off), or null for the client's
      * @return this builder

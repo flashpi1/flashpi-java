@@ -1,7 +1,10 @@
 package ec.com.flashpi.models;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.type.WritableTypeId;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 
@@ -23,5 +26,23 @@ public final class ModelSerializer extends StdSerializer<FlashpiModel> {
   public void serialize(FlashpiModel value, JsonGenerator generator, SerializerProvider provider)
       throws IOException {
     Types.writeModel(value, generator, provider);
+  }
+
+  /**
+   * With Jackson's polymorphic typing (default typing, @JsonTypeInfo): the type id, then the
+   * members.
+   */
+  @Override
+  public void serializeWithType(
+      FlashpiModel value,
+      JsonGenerator generator,
+      SerializerProvider provider,
+      TypeSerializer typeSerializer)
+      throws IOException {
+    WritableTypeId typeId =
+        typeSerializer.writeTypePrefix(
+            generator, typeSerializer.typeId(value, JsonToken.START_OBJECT));
+    Types.writeMembers(value, generator, provider);
+    typeSerializer.writeTypeSuffix(generator, typeId);
   }
 }

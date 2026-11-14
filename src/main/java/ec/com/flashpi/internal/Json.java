@@ -1,9 +1,13 @@
 package ec.com.flashpi.internal;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ec.com.flashpi.models.ModelDeserializer;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
@@ -11,11 +15,15 @@ import java.util.Map;
 /**
  * The SDK's Jackson mapper. The models carry their own (de)serializers, so this is a plain {@code
  * ObjectMapper}: the SDK works with any Jackson 2 from 2.13 on, and never needs a Java time module.
+ * Its parse errors never quote the source: before Jackson 2.16 they did, and an answer can hold a
+ * webhook secret or personal data.
  *
  * <p>Internal: not part of the SDK's API, and may change in any version.
  */
 public final class Json {
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER =
+      new ObjectMapper(
+          JsonFactory.builder().disable(StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION).build());
 
   private Json() {}
 
@@ -57,6 +65,18 @@ public final class Json {
   }
 
   /**
+   * A reader of the API's answers: lenient, so a member whose JSON does not fit its type is kept as
+   * an additional property instead of failing the whole answer (an older SDK keeps working when the
+   * API changes a member).
+   *
+   * @param type the model's class
+   * @return the reader
+   */
+  public static ObjectReader answer(Class<?> type) {
+    return MAPPER.readerFor(type).withAttribute(ModelDeserializer.LENIENT, true);
+  }
+
+  /**
    * The JSON object of a Problem Details answer: a JSON object with a string {@code code}.
    *
    * @param body the answer's text
@@ -78,7 +98,8 @@ public final class Json {
   }
 
   /**
-   * A model read from a JSON node, or null when it does not fit.
+   * A model read leniently (see {@link #answer}) from a JSON node, or null when the node is not an
+   * object.
    *
    * @param node the node
    * @param type the model's class
@@ -87,8 +108,8 @@ public final class Json {
    */
   public static <T> T readOrNull(JsonNode node, Class<T> type) {
     try {
-      return MAPPER.treeToValue(node, type);
-    } catch (JsonProcessingException | RuntimeException error) {
+      return answer(type).readValue(node);
+    } catch (IOException | RuntimeException error) {
       return null;
     }
   }

@@ -12,8 +12,9 @@ import java.util.Objects;
  * <p>A model keeps which members were set, so a member set to null is sent as null while a member
  * left unset is not sent at all (what a PATCH needs), and a model read from the API is written back
  * the same way. Members this version of the SDK does not know are kept in {@link
- * #getAdditionalProperties()}. Models are immutable, compare by value and never show a secret in
- * {@link #toString()}.
+ * #getAdditionalProperties()}. Models are immutable, compare by value, and {@link #toString()}
+ * shows {@code ***} for every member whose name says it holds a secret ({@code secret}, {@code
+ * password} or {@code token} in it), known or additional.
  */
 public abstract class FlashpiModel implements Serializable {
   private static final long serialVersionUID = 1L;
@@ -84,7 +85,7 @@ public abstract class FlashpiModel implements Serializable {
     return Objects.hash(getClass(), members, additionalProperties);
   }
 
-  /** The class and its members; a secret member shows as {@code ***}. */
+  /** The class and its members; a member whose name says it is a secret shows as {@code ***}. */
   @Override
   public final String toString() {
     StringBuilder out = new StringBuilder(getClass().getSimpleName()).append('{');
@@ -97,7 +98,12 @@ public abstract class FlashpiModel implements Serializable {
       separator = ", ";
     }
     for (Map.Entry<String, Object> member : additionalProperties.entrySet()) {
-      out.append(separator).append(member.getKey()).append('=').append(member.getValue());
+      boolean secret =
+          member.getValue() != null && Types.SECRET_NAME.matcher(member.getKey()).matches();
+      out.append(separator)
+          .append(member.getKey())
+          .append('=')
+          .append(secret ? "***" : Types.redact(member.getValue()));
       separator = ", ";
     }
     return out.append('}').toString();
@@ -132,7 +138,8 @@ public abstract class FlashpiModel implements Serializable {
 
     /**
      * Sets a member this version of the SDK does not know yet, sent as it is (any value Jackson can
-     * write).
+     * write; maps and lists are copied). A model holding values of your own classes compares them
+     * with their equals() and serializes only if they are {@code Serializable}.
      *
      * @param name the member's name, as in the API
      * @param value its value; null sends null
@@ -146,7 +153,7 @@ public abstract class FlashpiModel implements Serializable {
         throw new IllegalArgumentException(
             name + " is a member of " + type.name() + ": set it with " + name + "(...)");
       }
-      additionalProperties.put(name, value);
+      additionalProperties.put(name, Types.freeze(value));
       return (B) this;
     }
 

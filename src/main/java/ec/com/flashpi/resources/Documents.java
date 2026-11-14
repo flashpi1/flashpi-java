@@ -130,7 +130,8 @@ public final class Documents extends Resource {
 
   /**
    * The RIDE (the printable PDF) of an authorized document. Throws a {@code ConflictException} with
-   * code {@code ride_not_available} while it is still being generated.
+   * code {@code ride_not_available} while the document is not authorized yet or its RIDE is being
+   * generated, and when its generation failed (see {@code getProblem().getRideStatus()}).
    *
    * @param documentId the document's id
    * @return the PDF's bytes
@@ -141,7 +142,8 @@ public final class Documents extends Resource {
 
   /**
    * The RIDE (the printable PDF) of an authorized document. Throws a {@code ConflictException} with
-   * code {@code ride_not_available} while it is still being generated.
+   * code {@code ride_not_available} while the document is not authorized yet or its RIDE is being
+   * generated, and when its generation failed (see {@code getProblem().getRideStatus()}).
    *
    * @param documentId the document's id
    * @param options the call's options, or null
@@ -156,8 +158,10 @@ public final class Documents extends Resource {
   }
 
   /**
-   * Emails the authorized document (RIDE and XML) again to the address of its request. The new
-   * delivery shows in {@code email.deliveries}; daily limits apply ({@code RateLimitException}).
+   * Emails the authorized document (RIDE and XML) to the address of its request, also when no email
+   * was asked for when it was issued; in test mode, only to the verified members of your team. The
+   * new delivery shows in {@code email.deliveries}; daily limits apply ({@code
+   * RateLimitException}).
    *
    * @param documentId the document's id
    * @return the document
@@ -167,8 +171,10 @@ public final class Documents extends Resource {
   }
 
   /**
-   * Emails the authorized document (RIDE and XML) again to the address of its request. The new
-   * delivery shows in {@code email.deliveries}; daily limits apply ({@code RateLimitException}).
+   * Emails the authorized document (RIDE and XML) to the address of its request, also when no email
+   * was asked for when it was issued; in test mode, only to the verified members of your team. The
+   * new delivery shows in {@code email.deliveries}; daily limits apply ({@code
+   * RateLimitException}).
    *
    * @param documentId the document's id
    * @param options the call's options, or null

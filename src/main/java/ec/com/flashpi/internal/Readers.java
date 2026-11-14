@@ -49,7 +49,7 @@ public final class Readers {
         return null;
       }
       try {
-        return Json.mapper().readValue(body, type);
+        return Json.answer(type).readValue(body);
       } catch (JsonParseException error) {
         throw notJson(status, error);
       } catch (IOException error) {
@@ -81,9 +81,9 @@ public final class Readers {
       List<T> items = new ArrayList<>(data.size());
       try {
         for (JsonNode item : data) {
-          items.add(Json.mapper().treeToValue(item, type));
+          items.add(Json.answer(type).readValue(item));
         }
-      } catch (JsonProcessingException error) {
+      } catch (IOException error) {
         throw unreadable(status, error);
       }
       JsonNode cursor = pagination.get("nextCursor");

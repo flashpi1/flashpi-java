@@ -2,7 +2,9 @@ package ec.com.flashpi.exceptions;
 
 /**
  * Every exception this SDK throws extends this one, except for misused arguments ({@link
- * IllegalArgumentException} and {@link NullPointerException}, as for any Java method).
+ * IllegalArgumentException} and {@link NullPointerException}, as for any Java method), a
+ * certificate file that cannot be read ({@link java.io.UncheckedIOException}) and the errors of the
+ * JVM itself ({@link Error}s).
  *
  * <p>Its message never carries the API key, a webhook secret or a certificate password.
  */

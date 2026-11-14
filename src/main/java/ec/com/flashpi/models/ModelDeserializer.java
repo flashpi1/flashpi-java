@@ -14,14 +14,24 @@ import java.io.IOException;
 /**
  * Reads a model, or a union of models, from the API's JSON with any Jackson {@code ObjectMapper}.
  * Members this version of the SDK does not know are kept as additional properties; a member whose
- * JSON does not fit its type is reported as Jackson's input mismatch, with its path. Jackson finds
- * it through the models' annotations; you never use it directly.
+ * JSON does not fit its type is reported as Jackson's input mismatch, with its path (or, when the
+ * {@link #LENIENT} attribute is set, as the SDK reads the API's answers, kept as an additional
+ * property). Jackson finds it through the models' annotations; you never use it directly.
  */
 public final class ModelDeserializer extends StdDeserializer<Object>
     implements ContextualDeserializer {
   private static final long serialVersionUID = 1L;
 
-  private final transient ValueType type;
+  /**
+   * A {@code DeserializationContext} attribute: when it is {@code Boolean.TRUE}, a member whose
+   * JSON does not fit its type is kept as an additional property (its getter returns null) instead
+   * of failing the whole read. The SDK reads the API's answers so, so an older SDK never fails on a
+   * member the API changed.
+   */
+  public static final String LENIENT = "ec.com.flashpi.models.lenient";
+
+  // Looked up again after Java deserialization (a serialized ObjectMapper).
+  private transient ValueType type;
 
   /** Created by Jackson, then made contextual for the model it reads. */
   public ModelDeserializer() {
@@ -51,13 +61,24 @@ public final class ModelDeserializer extends StdDeserializer<Object>
 
   @Override
   public Object deserialize(JsonParser parser, DeserializationContext context) throws IOException {
-    if (type == null) {
+    ValueType resolved = type;
+    if (resolved == null && handledType() != Object.class) {
+      resolved = ModelRegistry.typeOf(handledType());
+      type = resolved;
+    }
+    if (resolved == null) {
       return context.reportBadDefinition(
           context.constructType(handledType()), "ModelDeserializer was not made contextual");
     }
-    JsonNode node = context.readValue(parser, JsonNode.class);
+    // The tree is read without type handling of its own, so Jackson's polymorphic typing (default
+    // typing, @JsonTypeInfo) around a model works.
+    JsonNode node =
+        (JsonNode)
+            context
+                .findNonContextualValueDeserializer(context.constructType(JsonNode.class))
+                .deserialize(parser, context);
     try {
-      return Types.read(type, node, "$");
+      return Types.read(resolved, node, "$", Boolean.TRUE.equals(context.getAttribute(LENIENT)));
     } catch (ModelException error) {
       return context.reportInputMismatch(handledType(), "%s", error.getMessage());
     }

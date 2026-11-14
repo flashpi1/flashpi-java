@@ -94,7 +94,8 @@ public final class Webhooks {
    *
    * @param payload the raw body, as it arrived
    * @param headers the request headers: any map, names in any case, values as text or lists of text
-   *     (Spring's {@code HttpHeaders}, JAX-RS's {@code MultivaluedMap}, ...)
+   *     (JAX-RS's {@code MultivaluedMap}, Spring's {@code HttpHeaders} before Spring 7; from Spring
+   *     7 on, which no longer makes it a map, pass {@code headers::getFirst})
    * @param secret the endpoint's signing secret ({@code whsec_...})
    * @throws WebhookVerificationException when it does not: answer 400 and ignore the request
    */
@@ -306,7 +307,7 @@ public final class Webhooks {
           Reason.INVALID_PAYLOAD, "The webhook body is not a JSON object");
     }
     try {
-      return Json.mapper().treeToValue(node, WebhookEvent.class);
+      return Json.answer(WebhookEvent.class).readValue(node);
     } catch (IOException error) {
       throw new WebhookVerificationException(
           Reason.INVALID_PAYLOAD, "The webhook body is not an event this SDK can read", error);
