@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Findings SpotBugs reports that are intended, each with its reason. -->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/3.1.0/spotbugs/etc/findbugsfilter.xsd">
+  <!-- The client and the resources hand out their shared, stateless resources and views. -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+    <Or>
+      <Class name="ec.com.flashpi.Flashpi"/>
+      <Package name="ec.com.flashpi.resources"/>
+    </Or>
+  </Match>
+  <!-- Unmodifiable collections, built so by their constructors. -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+    <Or>
+      <And><Class name="ec.com.flashpi.RequestOptions"/><Method name="getExtraHeaders"/></And>
+      <And><Class name="ec.com.flashpi.exceptions.ApiException"/><Method name="getErrors"/></And>
+      <And><Class name="ec.com.flashpi.internal.ListBody"/><Method name="data"/></And>
+    </Or>
+  </Match>
+  <!-- A body subscriber hands its future to the HttpClient: that is its contract. -->
+  <Match>
+    <Class name="ec.com.flashpi.internal.DeadlineBodyHandler$Subscriber"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <!-- HttpClient is AutoCloseable from Java 21 on only: the check is false on Java 11 to 20. -->
+  <Match>
+    <Class name="ec.com.flashpi.Flashpi"/>
+    <Method name="close"/>
+    <Bug pattern="BC_VACUOUS_INSTANCEOF"/>
+  </Match>
+  <!-- Null means "not base64", a different answer from an empty key. -->
+  <Match>
+    <Class name="ec.com.flashpi.Webhooks"/>
+    <Method name="decodeBase64"/>
+    <Bug pattern="PZLA_PREFER_ZERO_LENGTH_ARRAYS"/>
+  </Match>
+  <!-- A Capture is an instance: it holds the result of one call. -->
+  <Match>
+    <Class name="ec.com.flashpi.internal.Capture"/>
+    <Bug pattern="ISC_INSTANTIATE_STATIC_CLASS"/>
+  </Match>
+  <!-- The engine turns the HTTP client's failures into the SDK's unchecked exceptions. -->
+  <Match>
+    <Class name="ec.com.flashpi.internal.Engine"/>
+    <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+  </Match>
+  <!-- The SDK's own mapper, shared inside the SDK (an internal class). -->
+  <Match>
+    <Class name="ec.com.flashpi.internal.Json"/>
+    <Method name="mapper"/>
+    <Bug pattern="MS_EXPOSE_REP"/>
+  </Match>
+  <!-- A whole number has no fraction: an exact comparison is the point. -->
+  <Match>
+    <Class name="ec.com.flashpi.models.Types"/>
+    <Or>
+      <Method name="isWhole"/>
+      <Method name="write"/>
+    </Or>
+    <Bug pattern="FE_FLOATING_POINT_EQUALITY"/>
+  </Match>
+  <!-- A request keeps its multipart body, which the engine clears once the call ends. -->
+  <Match>
+    <Class name="ec.com.flashpi.internal.RequestSpec$Builder"/>
+    <Method name="multipart"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- The resources' base checks its engine; its subclasses are final and created by the client. -->
+  <Match>
+    <Class name="ec.com.flashpi.resources.Resource"/>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
+</FindBugsFilter>

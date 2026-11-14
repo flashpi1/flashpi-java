@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # By hand: gh workflow run ci.yml --ref <branch>. Such a run does not count for a pull
+  # request's required checks, which only take push and pull_request runs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A newer push to a pull request replaces its run; every run on main finishes.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MAVEN_ARGS: --batch-mode --no-transfer-progress
+
+# Third-party actions are pinned to full commit SHAs (the comment is the release).
+jobs:
+  verify:
+    name: Lint, typecheck and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # JDK 21 runs Error Prone and google-java-format; the build still targets Java 11.
+      - name: Set up Java 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Check the generated models match the committed OpenAPI document
+        run: java scripts/OpenApi.java check
+
+      - name: Check formatting
+        run: ./mvnw spotless:check
+
+      - name: Compile with Error Prone, test with coverage and build the Javadoc
+        run: ./mvnw verify
+
+      - name: SpotBugs
+        run: ./mvnw spotbugs:check
+
+  java:
+    name: Java ${{ matrix.java }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['11', '17', '21', '25']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - run: ./mvnw verify
+
+  lowest:
+    name: Lowest dependencies (Jackson 2.13, Java 11)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      # The Jackson that Spring Boot 2.7 ships: the oldest the SDK supports.
+      - name: Test with Jackson 2.13.5
+        run: |
+          ./mvnw verify -Djackson.version=2.13.5
+          ./mvnw dependency:tree -Djackson.version=2.13.5 -Dincludes=com.fasterxml.jackson.core \
+            | tee "$RUNNER_TEMP/tree.txt"
+          grep -q 'jackson-databind:jar:2.13.5' "$RUNNER_TEMP/tree.txt"
+
+  kotlin:
+    name: Kotlin README examples
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # ReadmeTest keeps src/test/kotlin/readme in step with the READMEs; this compiles it.
+      - name: Compile the Kotlin examples against the SDK
+        run: ./mvnw -Pkotlin -P!errorprone test-compile
+
+  build:
+    name: Build and install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            25
+          cache: maven
+
+      - name: Build the jar, the sources and the Javadoc
+        run: ./mvnw package -DskipTests
+
+      - name: Check what Maven Central would get
+        run: java scripts/PackageCheck.java
+
+      - name: Use the jar alone, with Jackson only, on Java 11 and 25
+        run: |
+          ./mvnw dependency:build-classpath -Dmdep.outputFile=target/runtime.classpath -Dmdep.includeScope=runtime
+          classpath="$(ls target/flashpi-java-*.jar | grep -v -e sources -e javadoc):$(cat target/runtime.classpath)"
+          for home in "$JAVA_HOME_11_X64" "$JAVA_HOME_25_X64"; do
+            "$home/bin/java" -cp "$classpath" scripts/InstalledCheck.java
+          done
