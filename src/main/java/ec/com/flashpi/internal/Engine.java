@@ -290,7 +290,7 @@ public final class Engine {
               .method(spec.method, body);
       // Not kept in a local or a field: the headers carry the API key.
       for (Map.Entry<String, String> header : headers(spec, call).entrySet()) {
-        builder.setHeader(header.getKey(), Headers.wire(header.getValue()));
+        builder.setHeader(header.getKey(), header.getValue());
       }
       return builder.build();
     } catch (IllegalArgumentException error) {

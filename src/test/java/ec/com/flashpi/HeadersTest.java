@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import ec.com.flashpi.FakeHttpClient.Answer;
 import ec.com.flashpi.Support.FakeTiming;
 import ec.com.flashpi.models.CreateIssuer;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -72,20 +71,8 @@ class HeadersTest {
     assertEquals(1, http.last().headers.allValues("idempotency-key").size());
   }
 
-  @Test
-  void textOutsideAsciiIsSentAsUtf8() {
-    FakeHttpClient http = new FakeHttpClient().always(Answer.json(200, STATUS));
-    Support.client(http)
-        .status()
-        .get(RequestOptions.builder().header("X-Name", "Año ñandú").build());
-    String wire = http.last().header("x-name");
-    assertEquals(
-        "Año ñandú",
-        new String(wire.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8));
-  }
-
   @ParameterizedTest
-  @ValueSource(strings = {"a\nb", "a\rb", "a\u0000b", "a\u007fb", "a\ud800b"})
+  @ValueSource(strings = {"a\nb", "a\rb", "a\u0000b", "a\u007fb", "a\ud800b", "Año", "a\u00a0b"})
   void refusesValuesThatCannotBeSentWithoutShowingThem(String value) {
     IllegalArgumentException error =
         assertThrows(

@@ -1,6 +1,5 @@
 package ec.com.flashpi.internal;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -67,8 +66,9 @@ public final class Headers {
    * @param label what the value is, for the message
    * @param value the value
    * @return the trimmed value
-   * @throws IllegalArgumentException when a line break, another control character other than the
-   *     tab, or a lone surrogate (which has no UTF-8) is left
+   * @throws IllegalArgumentException when a line break or another control character other than the
+   *     tab is left, or a character outside ASCII, which the JDK's HttpClient would send as {@code
+   *     ?}
    */
   public static String value(String label, String value) {
     Objects.requireNonNull(value, () -> label + " is null");
@@ -77,13 +77,9 @@ public final class Headers {
       throw new IllegalArgumentException(label + " has a line break or another control character");
     }
     for (int index = 0; index < trimmed.length(); index++) {
-      char c = trimmed.charAt(index);
-      if (Character.isHighSurrogate(c)
-          && index + 1 < trimmed.length()
-          && Character.isLowSurrogate(trimmed.charAt(index + 1))) {
-        index++;
-      } else if (Character.isSurrogate(c)) {
-        throw new IllegalArgumentException(label + " has a character that cannot be sent as UTF-8");
+      if (trimmed.charAt(index) > 0x7e) {
+        throw new IllegalArgumentException(
+            label + " has a character outside ASCII, which the JDK's HttpClient cannot send");
       }
     }
     return trimmed;
@@ -108,22 +104,6 @@ public final class Headers {
           name, value("The value of header \"" + name + "\" in " + label, header.getValue()));
     }
     return Collections.unmodifiableMap(checked);
-  }
-
-  /**
-   * A value as the JDK's HttpClient sends it: its bytes are the characters' low bytes, so text
-   * outside ASCII becomes the chars of its UTF-8 bytes, which then go on the wire as UTF-8.
-   *
-   * @param value a checked value
-   * @return the value for {@code HttpRequest.Builder.setHeader}
-   */
-  public static String wire(String value) {
-    for (int index = 0; index < value.length(); index++) {
-      if (value.charAt(index) > 0x7f) {
-        return new String(value.getBytes(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1);
-      }
-    }
-    return value;
   }
 
   /** Trims HTTP white space (space, tab, CR, LF) around a value, as the Fetch standard does. */
