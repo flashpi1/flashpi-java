@@ -5,8 +5,6 @@ Ecuador, para Java y Kotlin.
 
 [English](https://github.com/flashpi1/flashpi-java/blob/main/README.en.md)
 
-> Aún no está publicado en Maven Central: la primera versión será la 0.1.0.
-
 - Las 45 operaciones de la API: los seis comprobantes, documentos (XML, RIDE en PDF, correo),
   emisores con establecimientos, puntos de emisión y certificados .p12, webhooks y eventos.
 - Modelos generados del documento OpenAPI de la API, con getters tipados y builders
