@@ -58,6 +58,7 @@
     <junit.version>5.14.4</junit.version>
     <errorprone.version>2.51.0</errorprone.version>
     <google-java-format.version>1.36.1</google-java-format.version>
+    <kotlin.version>2.4.21</kotlin.version>
     <!-- JUnit tags left out of a normal run: the live suite calls the real API. -->
     <excludedGroups>live</excludedGroups>
     <groups />
@@ -290,6 +291,17 @@
         </executions>
       </plugin>
 
+      <!-- ./mvnw spotbugs:check (CI's verify job), on the compiled classes. -->
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <effort>Max</effort>
+          <threshold>Low</threshold>
+          <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+        </configuration>
+      </plugin>
+
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
@@ -386,6 +398,49 @@
                 <removeUnusedImports />
               </java>
             </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!--
+      The Kotlin example of each README (src/test/kotlin/readme, kept in step by ReadmeTest),
+      compiled against the SDK: ./mvnw -Pkotlin test-compile. Kotlin is not a dependency of the SDK.
+    -->
+    <profile>
+      <id>kotlin</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.jetbrains.kotlin</groupId>
+          <artifactId>kotlin-stdlib</artifactId>
+          <version>${kotlin.version}</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-maven-plugin</artifactId>
+            <version>${kotlin.version}</version>
+            <executions>
+              <execution>
+                <id>readme-examples</id>
+                <phase>test-compile</phase>
+                <goals>
+                  <goal>test-compile</goal>
+                </goals>
+                <configuration>
+                  <sourceDirs>
+                    <sourceDir>src/test/kotlin</sourceDir>
+                  </sourceDirs>
+                  <jvmTarget>11</jvmTarget>
+                  <args>
+                    <arg>-Werror</arg>
+                  </args>
+                </configuration>
+              </execution>
+            </executions>
           </plugin>
         </plugins>
       </build>

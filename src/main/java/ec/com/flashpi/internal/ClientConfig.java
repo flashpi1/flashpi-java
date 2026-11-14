@@ -2,6 +2,8 @@ package ec.com.flashpi.internal;
 
 import ec.com.flashpi.Language;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -40,7 +42,7 @@ public final class ClientConfig {
     this.timeout = timeout;
     this.maxRetries = maxRetries;
     this.language = language;
-    this.defaultHeaders = defaultHeaders;
+    this.defaultHeaders = Collections.unmodifiableMap(new LinkedHashMap<>(defaultHeaders));
   }
 
   String apiKey() {
