@@ -1,7 +1,6 @@
 package ec.com.flashpi.internal;
 
 import ec.com.flashpi.exceptions.FlashpiException;
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharsetEncoder;
@@ -41,23 +40,42 @@ public final class Multipart {
   public static Multipart certificate(
       char[] password, byte[] file, String filename, String fileType) {
     String boundary = boundary();
-    ByteArrayOutputStream out = new ByteArrayOutputStream(file.length + 512);
-    write(out, "--" + boundary + "\r\n");
-    write(out, "Content-Disposition: form-data; name=\"password\"\r\n\r\n");
+    byte[] head =
+        utf8("--" + boundary + "\r\nContent-Disposition: form-data; name=\"password\"\r\n\r\n");
+    byte[] middle =
+        utf8(
+            "\r\n--"
+                + boundary
+                + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\""
+                + escape(filename)
+                + "\"\r\nContent-Type: "
+                + fileType
+                + "\r\n\r\n");
+    byte[] tail = utf8("\r\n--" + boundary + "--\r\n");
     byte[] secret = utf8(password);
     try {
-      out.write(secret, 0, secret.length);
+      // One array of the exact size: no buffer left behind with a copy of the password.
+      byte[] body =
+          new byte[head.length + secret.length + middle.length + file.length + tail.length];
+      int at = 0;
+      for (byte[] part : new byte[][] {head, secret, middle, file, tail}) {
+        System.arraycopy(part, 0, body, at, part.length);
+        at += part.length;
+      }
+      return new Multipart(body, "multipart/form-data; boundary=" + boundary);
     } finally {
       Arrays.fill(secret, (byte) 0);
     }
-    write(out, "\r\n--" + boundary + "\r\n");
-    write(
-        out,
-        "Content-Disposition: form-data; name=\"file\"; filename=\"" + escape(filename) + "\"\r\n");
-    write(out, "Content-Type: " + fileType + "\r\n\r\n");
-    out.write(file, 0, file.length);
-    write(out, "\r\n--" + boundary + "--\r\n");
-    return new Multipart(out.toByteArray(), "multipart/form-data; boundary=" + boundary);
+  }
+
+  /** The body itself, for the engine, which clears it with {@link #clear()} once the call ends. */
+  byte[] bytes() {
+    return body;
+  }
+
+  /** Overwrites the body (the .p12 and its password) with zeros. */
+  void clear() {
+    Arrays.fill(body, (byte) 0);
   }
 
   /**
@@ -141,8 +159,7 @@ public final class Multipart {
     }
   }
 
-  private static void write(ByteArrayOutputStream out, String text) {
-    byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
-    out.write(bytes, 0, bytes.length);
+  private static byte[] utf8(String text) {
+    return text.getBytes(StandardCharsets.UTF_8);
   }
 }

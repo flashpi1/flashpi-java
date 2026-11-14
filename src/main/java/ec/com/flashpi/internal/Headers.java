@@ -50,11 +50,11 @@ public final class Headers {
   public static String name(String name) {
     Objects.requireNonNull(name, "A header name is null");
     if (!TOKEN.matcher(name).matches()) {
-      throw new IllegalArgumentException("\"" + name + "\" is not a valid header name");
+      throw new IllegalArgumentException(shown(name) + " is not a valid header name");
     }
     if (REFUSED.contains(name.toLowerCase(Locale.ROOT))) {
       throw new IllegalArgumentException(
-          "\"" + name + "\" is set by the HTTP client from the request: leave it out");
+          shown(name) + " is set by the HTTP client from the request: leave it out");
     }
     return name;
   }
@@ -104,6 +104,26 @@ public final class Headers {
           name, value("The value of header \"" + name + "\" in " + label, header.getValue()));
     }
     return Collections.unmodifiableMap(checked);
+  }
+
+  /**
+   * Text for a message, quoted, with control characters escaped (no forged log lines) and cut at 40
+   * characters.
+   *
+   * @param text the text
+   * @return the text to show
+   */
+  public static String shown(String text) {
+    StringBuilder out = new StringBuilder("\"");
+    int count = 0;
+    for (int index = 0; index < text.length() && count < 40; index++, count++) {
+      char c = text.charAt(index);
+      out.append(c < 0x20 || c == 0x7f ? String.format("\\u%04x", (int) c) : String.valueOf(c));
+    }
+    if (text.length() > 40) {
+      out.append("...");
+    }
+    return out.append('"').toString();
   }
 
   /** Trims HTTP white space (space, tab, CR, LF) around a value, as the Fetch standard does. */

@@ -48,7 +48,10 @@ public final class Flashpi implements AutoCloseable {
   /** How long each attempt of a request may take, from sending it to reading the whole answer. */
   public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(60);
 
-  /** Retries after network errors, timeouts, 429 and 5xx. */
+  /**
+   * Retries after network errors, timeouts, 408, 429 and 5xx (not 501 or {@code
+   * demo_issuer_unavailable}; an answer asking to wait more than 60 seconds is thrown).
+   */
   public static final int DEFAULT_MAX_RETRIES = 2;
 
   /** What an API key is made of: visible ASCII, without spaces. */
@@ -67,6 +70,7 @@ public final class Flashpi implements AutoCloseable {
   private final ClientConfig config;
   private final HttpClient http;
   private final boolean ownsHttpClient;
+  private final Engine engine;
 
   private final Invoices invoices;
   private final CreditNotes creditNotes;
@@ -125,7 +129,7 @@ public final class Flashpi implements AutoCloseable {
         builder.httpClient != null
             ? builder.httpClient
             : HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
-    Engine engine = new Engine(config, http, builder.timing);
+    this.engine = new Engine(config, http, builder.timing);
     this.invoices = new Invoices(engine);
     this.creditNotes = new CreditNotes(engine);
     this.debitNotes = new DebitNotes(engine);
@@ -279,12 +283,17 @@ public final class Flashpi implements AutoCloseable {
 
   /**
    * Closes the connections of the HttpClient the SDK created (on Java 21 or later, where an
-   * HttpClient can be closed; before, they close once the client is unused). An HttpClient of yours
-   * is left open.
+   * HttpClient can be closed; before, they close once the client is unused), and refuses the later
+   * calls of this client with a {@link FlashpiException}. A client with an HttpClient of yours is
+   * left as it is.
    */
   @Override
   public void close() {
-    if (ownsHttpClient && http instanceof AutoCloseable) {
+    if (!ownsHttpClient) {
+      return;
+    }
+    engine.close();
+    if (http instanceof AutoCloseable) {
       try {
         ((AutoCloseable) http).close();
       } catch (Exception error) {
@@ -329,6 +338,10 @@ public final class Flashpi implements AutoCloseable {
       URI uri = new URI(url);
       String scheme =
           uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(java.util.Locale.ROOT);
+      if (uri.getRawUserInfo() != null) {
+        // Never shown: it holds a password, and the URL goes into every error message.
+        throw new FlashpiException("baseUrl cannot carry a user or a password");
+      }
       if ((scheme.equals("http") || scheme.equals("https"))
           && uri.getHost() != null
           && uri.getRawQuery() == null
@@ -339,7 +352,7 @@ public final class Flashpi implements AutoCloseable {
       // Reported below.
     }
     throw new FlashpiException(
-        "baseUrl must be an http:// or https:// URL with a host, got \"" + url + "\"");
+        "baseUrl must be an http:// or https:// URL with a host, got " + Headers.shown(url));
   }
 
   /** Builds a {@link Flashpi} client. Every setting left unset keeps its default. */
@@ -392,7 +405,8 @@ public final class Flashpi implements AutoCloseable {
     }
 
     /**
-     * Retries after network errors, timeouts, 429 and 5xx (default 2).
+     * Retries after network errors, timeouts, 408, 429 and 5xx (default 2). Not 501 or {@code
+     * demo_issuer_unavailable}, and not an answer that asks to wait more than 60 seconds.
      *
      * @param maxRetries 0 or more; 0 turns them off
      * @return this builder

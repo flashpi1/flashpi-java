@@ -140,6 +140,17 @@ class ErrorsTest {
     assertEquals(Duration.ofSeconds(31), RetryAfter.parse("2026-11-13T12:00:30.5Z", now));
     assertEquals(
         Duration.ofSeconds(1_000_000_000_000_000_000L), RetryAfter.parse("9".repeat(40), now));
+    // The other two forms RFC 9110 asks recipients to accept, and ISO without an offset (UTC).
+    assertEquals(Duration.ofSeconds(90), RetryAfter.parse("Friday, 13-Nov-26 12:01:30 GMT", now));
+    assertEquals(Duration.ofSeconds(90), RetryAfter.parse("Fri Nov 13 12:01:30 2026", now));
+    assertEquals(
+        Duration.ofSeconds(90),
+        RetryAfter.parse("Fri Nov  3 12:01:30 2026", Instant.parse("2026-11-03T12:00:00Z")));
+    assertEquals(Duration.ofSeconds(30), RetryAfter.parse("2026-11-13T12:00:30", now));
+    assertEquals(Duration.ofSeconds(30), RetryAfter.parse("2026-11-13 12:00:30Z", now));
+    assertEquals(Duration.ZERO, RetryAfter.parse("Sunday, 06-Nov-94 08:49:37 GMT", now));
+    assertNull(RetryAfter.parse("Friday, 13-Xyz-26 12:01:30 GMT", now));
+    assertNull(RetryAfter.parse("Fri Nov 31 12:01:30 2026", now));
     assertNull(RetryAfter.parse("soon", now));
     assertNull(RetryAfter.parse("-1", now));
     assertNull(RetryAfter.parse(null, now));

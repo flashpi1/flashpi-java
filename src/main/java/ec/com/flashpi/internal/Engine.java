@@ -16,6 +16,7 @@ import ec.com.flashpi.exceptions.PermissionDeniedException;
 import ec.com.flashpi.exceptions.RateLimitException;
 import ec.com.flashpi.exceptions.UnprocessableEntityException;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -72,6 +74,7 @@ public final class Engine {
   private final ClientConfig config;
   private final HttpClient http;
   private final Timing timing;
+  private volatile boolean closed;
 
   /**
    * An engine.
@@ -86,6 +89,11 @@ public final class Engine {
     this.timing = timing;
   }
 
+  /** Refuses every later request: the client closed the HttpClient it created. */
+  public void close() {
+    closed = true;
+  }
+
   /**
    * Sends a request with its retries and recoveries.
    *
@@ -95,7 +103,25 @@ public final class Engine {
    * @throws FlashpiException when it fails
    */
   public <T> ApiResponse<T> request(RequestSpec<T> spec) {
+    try {
+      return send(spec);
+    } finally {
+      if (spec.multipart != null) {
+        // The .p12 and its password: no copy of the SDK's outlives the call.
+        spec.multipart.clear();
+      }
+    }
+  }
+
+  private <T> ApiResponse<T> send(RequestSpec<T> spec) {
     Call call = prepare(spec);
+    if (closed) {
+      FlashpiException error =
+          new FlashpiException(
+              "This Flashpi client is closed: create another one to send requests");
+      error.setIdempotencyKey(call.idempotencyKey);
+      throw error;
+    }
     long started = timing.nanoTime();
     int attempt = 0;
     int retries = 0;
@@ -277,7 +303,7 @@ public final class Engine {
   private HttpRequest build(RequestSpec<?> spec, Call call) {
     HttpRequest.BodyPublisher body;
     if (spec.multipart != null) {
-      body = HttpRequest.BodyPublishers.ofByteArray(spec.multipart.body());
+      body = HttpRequest.BodyPublishers.ofByteArray(spec.multipart.bytes());
     } else if (call.content != null) {
       body = HttpRequest.BodyPublishers.ofByteArray(call.content);
     } else {
@@ -311,12 +337,8 @@ public final class Engine {
     CompletableFuture<HttpResponse<byte[]>> future;
     try {
       future = http.sendAsync(request, handler);
-    } catch (IllegalArgumentException error) {
-      throw new FlashpiException(
-          spec.method
-              + " "
-              + call.url
-              + " was not sent: the HTTP client refused it as invalid HTTP");
+    } catch (RuntimeException error) {
+      throw transferError(spec, call, error);
     }
     try {
       HttpResponse<byte[]> response =
@@ -335,6 +357,9 @@ public final class Engine {
       handler.cancel();
       Thread.currentThread().interrupt();
       throw new FlashpiException(spec.method + " " + call.url + " was interrupted", error);
+    } catch (CancellationException error) {
+      handler.cancel();
+      throw new FlashpiException(spec.method + " " + call.url + " was cancelled", error);
     } catch (ExecutionException error) {
       handler.cancel();
       throw transferError(spec, call, error.getCause());
@@ -348,25 +373,38 @@ public final class Engine {
         return timeoutError(spec, call, cause);
       }
     }
-    if (cause instanceof IOException) {
-      String reason =
-          cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-      return new ApiConnectionException(spec.method + " " + call.url + " failed: " + reason, cause);
-    }
     if (cause instanceof IllegalArgumentException) {
+      // Without the client's reason, which may quote a header: that may be the Authorization one.
       return new FlashpiException(
           spec.method
               + " "
               + call.url
               + " was not sent: the HTTP client refused it as invalid HTTP");
     }
-    if (cause instanceof RuntimeException) {
-      return (RuntimeException) cause;
-    }
     if (cause instanceof Error) {
       throw (Error) cause;
     }
-    return new ApiConnectionException(spec.method + " " + call.url + " failed: " + cause, cause);
+    String failed = spec.method + " " + call.url + " failed: " + reason(cause);
+    if (cause instanceof IOException || cause instanceof UncheckedIOException) {
+      return new ApiConnectionException(failed, cause);
+    }
+    // Anything else from a caller's HttpClient: an SDK error, with the call's key, not retried.
+    return new FlashpiException(failed, cause);
+  }
+
+  /**
+   * Why a transfer failed: the first message of the cause chain, or the chain's classes when none
+   * has one (a DNS failure on Java 21 is a ConnectException without a message).
+   */
+  static String reason(Throwable cause) {
+    List<String> classes = new ArrayList<>();
+    for (Throwable error = cause; error != null && classes.size() < 8; error = error.getCause()) {
+      if (error.getMessage() != null && !error.getMessage().isEmpty()) {
+        return error.getMessage();
+      }
+      classes.add(error.getClass().getSimpleName());
+    }
+    return String.join(": ", classes);
   }
 
   private static ApiTimeoutException timeoutError(RequestSpec<?> spec, Call call, Throwable cause) {
@@ -477,11 +515,11 @@ public final class Engine {
    * issuing another.
    */
   private <T> ApiResponse<T> recoverDocument(RequestSpec<T> spec, Call call, String documentId) {
-    RequestSpec<T> read =
-        RequestSpec.of("GET", Paths.of("/v1/documents/{}", documentId), spec.reader)
-            .options(call.options.toBuilder().idempotencyKey(null).build())
-            .build();
     try {
+      RequestSpec<T> read =
+          RequestSpec.of("GET", Paths.of("/v1/documents/{}", documentId), spec.reader)
+              .options(call.options.toBuilder().idempotencyKey(null).build())
+              .build();
       return request(read);
     } catch (FlashpiException error) {
       error.setIdempotencyKey(call.idempotencyKey);

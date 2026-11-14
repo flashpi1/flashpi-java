@@ -73,10 +73,12 @@ final class FakeHttpClient extends HttpClient {
     final int status;
     final Map<String, List<String>> headers = new LinkedHashMap<>();
     final byte[] body;
-    final IOException failure;
+    final Throwable failure;
     final boolean hang;
+    RuntimeException thrown;
+    boolean cancelled;
 
-    private Answer(int status, byte[] body, IOException failure, boolean hang) {
+    private Answer(int status, byte[] body, Throwable failure, boolean hang) {
       this.status = status;
       this.body = body;
       this.failure = failure;
@@ -112,6 +114,25 @@ final class FakeHttpClient extends HttpClient {
 
     static Answer failure(IOException failure) {
       return new Answer(0, null, failure, false);
+    }
+
+    /** The future fails with any throwable (a caller's own HttpClient). */
+    static Answer failedWith(Throwable failure) {
+      return new Answer(0, null, failure, false);
+    }
+
+    /** sendAsync itself throws. */
+    static Answer throwing(RuntimeException error) {
+      Answer answer = new Answer(0, null, null, false);
+      answer.thrown = error;
+      return answer;
+    }
+
+    /** sendAsync returns a cancelled future. */
+    static Answer cancelledFuture() {
+      Answer answer = new Answer(0, null, null, false);
+      answer.cancelled = true;
+      return answer;
     }
 
     /** Never answers: the attempt can only end by its deadline. */
@@ -225,6 +246,14 @@ final class FakeHttpClient extends HttpClient {
       throw new AssertionError("Unexpected request: " + recorded.method + " " + recorded.uri);
     }
     Answer answer = next.apply(recorded);
+    if (answer.thrown != null) {
+      throw answer.thrown;
+    }
+    if (answer.cancelled) {
+      CompletableFuture<HttpResponse<T>> future = new CompletableFuture<>();
+      future.cancel(true);
+      return future;
+    }
     if (answer.failure != null) {
       return CompletableFuture.failedFuture(answer.failure);
     }

@@ -1,6 +1,7 @@
 package ec.com.flashpi;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -378,5 +379,100 @@ class RetriesTest {
     assertTrue(Thread.interrupted());
     assertEquals("The call was interrupted while waiting to retry", error.getMessage());
     assertEquals(http.last().header("idempotency-key"), error.getIdempotencyKey());
+  }
+
+  @Test
+  void aRecoveredIdThatCannotBeAPathFailsWithTheKey() {
+    FakeHttpClient http =
+        new FakeHttpClient().then(Answer.status(502)).then(Answer.json(422, reused("..")));
+    FlashpiException error =
+        assertThrows(
+            FlashpiException.class,
+            () ->
+                Support.client(http)
+                    .invoices()
+                    .create(BODY, RequestOptions.builder().idempotencyKey("order-9").build()));
+    assertEquals("order-9", error.getIdempotencyKey());
+    assertEquals(2, http.requests.size());
+  }
+
+  @Test
+  void aClosedClientRefusesCallsAtOnce() {
+    FakeHttpClient http = new FakeHttpClient();
+    Flashpi flashpi =
+        Flashpi.builder()
+            .apiKey(Support.KEY)
+            .timing(new FakeTiming())
+            .environmentVariables(name -> null)
+            .build();
+    flashpi.close();
+    FlashpiException error =
+        assertThrows(FlashpiException.class, () -> flashpi.invoices().create(BODY));
+    assertTrue(error.getMessage().contains("closed"));
+    assertNotNull(error.getIdempotencyKey());
+    assertTrue(http.requests.isEmpty());
+  }
+
+  @Test
+  void aConnectionErrorExplainsItselfFromItsCauses() {
+    IOException resolved = new java.net.ConnectException();
+    resolved.initCause(new java.nio.channels.UnresolvedAddressException());
+    FakeHttpClient http = new FakeHttpClient().always(Answer.failure(resolved));
+    ApiConnectionException error =
+        assertThrows(
+            ApiConnectionException.class,
+            () ->
+                Support.client(http).status().get(RequestOptions.builder().maxRetries(0).build()));
+    assertEquals(
+        "GET https://api.test/v1/status failed: ConnectException: UnresolvedAddressException",
+        error.getMessage());
+    java.net.ConnectException refused = new java.net.ConnectException();
+    refused.initCause(new IOException("Connection refused"));
+    http.always(Answer.failure(refused));
+    ApiConnectionException second =
+        assertThrows(
+            ApiConnectionException.class,
+            () ->
+                Support.client(http).status().get(RequestOptions.builder().maxRetries(0).build()));
+    assertEquals("GET https://api.test/v1/status failed: Connection refused", second.getMessage());
+  }
+
+  @Test
+  void everyFailureOfACallersHttpClientIsAFlashpiErrorWithTheKey() {
+    FakeHttpClient http =
+        new FakeHttpClient()
+            .then(Answer.failedWith(new java.io.UncheckedIOException(new IOException("reset"))))
+            .then(Answer.json(200, Support.DOCUMENT));
+    // An unchecked I/O failure is a network error, retried.
+    Support.client(http).invoices().create(BODY);
+    assertEquals(2, http.requests.size());
+
+    for (Answer answer :
+        List.of(
+            Answer.failedWith(new IllegalStateException("broken")),
+            Answer.throwing(new IllegalStateException("broken")),
+            Answer.cancelledFuture())) {
+      FakeHttpClient failing = new FakeHttpClient().always(answer);
+      FlashpiException error =
+          assertThrows(
+              FlashpiException.class, () -> Support.client(failing).invoices().create(BODY));
+      assertEquals(failing.last().header("idempotency-key"), error.getIdempotencyKey());
+      assertEquals(1, failing.requests.size(), error.getMessage());
+    }
+  }
+
+  @Test
+  void aRefusedRequestFromTheFutureIsNotRetriedNorExplained() {
+    FakeHttpClient http =
+        new FakeHttpClient()
+            .always(
+                Answer.throwing(
+                    new IllegalArgumentException("invalid header value: Bearer fp_test_x")));
+    FlashpiException error =
+        assertThrows(FlashpiException.class, () -> Support.client(http).status().get());
+    assertEquals(
+        "GET https://api.test/v1/status was not sent: the HTTP client refused it as invalid HTTP",
+        error.getMessage());
+    assertNull(error.getCause());
   }
 }
