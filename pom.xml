@@ -95,6 +95,17 @@
   </dependencyManagement>
 
   <build>
+    <resources>
+      <!-- The license travels in the jar and the sources jar. -->
+      <resource>
+        <directory>${project.basedir}</directory>
+        <includes>
+          <include>LICENSE</include>
+        </includes>
+        <targetPath>META-INF</targetPath>
+      </resource>
+    </resources>
+
     <pluginManagement>
       <!-- Every plugin pinned, so a build never picks up a version by itself. -->
       <plugins>
@@ -152,6 +163,11 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
           <version>3.7.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.11.0</version>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
