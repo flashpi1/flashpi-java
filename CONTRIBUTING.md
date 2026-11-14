@@ -121,8 +121,5 @@ be changed or deleted. The build job keeps the files for 30 days, as long as Git
 approval; if the publish job fails because they expired, re-run the "Build the release" job alone
 (not "Re-run all jobs", which skips the release once it exists).
 
-Before the first release PR is merged, drop the not-on-Central notice from both READMEs in its own
-pull request.
-
 To rotate the GPG key, publish the new public key, replace both GPG secrets, and keep the old public
 key on the keyserver: the versions it signed still point to it.

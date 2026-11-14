@@ -5,8 +5,6 @@ SRI, for Java and Kotlin.
 
 [Español](https://github.com/flashpi1/flashpi-java/blob/main/README.md)
 
-> Not on Maven Central yet: the first version will be 0.1.0.
-
 - The API's 45 operations: the six document types, documents (XML, RIDE PDF, email), issuers with
   their establishments, emission points and .p12 certificates, webhooks and events.
 - Models generated from the API's OpenAPI document, with typed getters and builders
