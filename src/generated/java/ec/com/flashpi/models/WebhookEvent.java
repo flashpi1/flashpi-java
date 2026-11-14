@@ -4,6 +4,7 @@
 package ec.com.flashpi.models;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.time.OffsetDateTime;
 
 /**
@@ -13,6 +14,7 @@ import java.time.OffsetDateTime;
  * CertificateEvent, AccountEvent, WebhookEndpointVerificationEvent, by its {@code type}; EventThin
  * for a type this version does not know: check it with instanceof.
  */
+@JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)
 public interface WebhookEvent {
   /**

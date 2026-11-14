@@ -9,8 +9,8 @@ import java.util.Map;
 
 /**
  * The filters of {@code webhookEndpointsDeliveriesList} (GET
- * /v1/webhook-endpoints/{endpointId}/deliveries). Every member is optional. Build one with {@link
- * #builder()}.
+ * /v1/webhook-endpoints/&#123;endpointId&#125;/deliveries). Every member is optional. Build one
+ * with {@link #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

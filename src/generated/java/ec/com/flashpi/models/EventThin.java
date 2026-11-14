@@ -10,7 +10,7 @@ import java.util.Map;
 
 /**
  * The body sent to {@code thin} endpoints: the event without its snapshot. Read it with GET
- * /v1/events/{id}. Build one with {@link #builder()}.
+ * /v1/events/&#123;id&#125;. Build one with {@link #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

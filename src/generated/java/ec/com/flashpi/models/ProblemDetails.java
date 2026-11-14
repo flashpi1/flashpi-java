@@ -63,9 +63,10 @@ public final class ProblemDetails extends FlashpiModel {
 
   /**
    * URI of the problem type: the page that documents {@code code}, in the language of the response
-   * ({@code https://flashpi.com.ec/docs/en/errors/{code}} in English, {@code
-   * https://flashpi.com.ec/docs/errors/{code}} with Accept-Language: es). It changes with the
-   * language, so branch on {@code code}, never on {@code type}. Format: uri. Required.
+   * (<code>https://flashpi.com.ec/docs/en/errors/&#123;code&#125;</code> in English,
+   * <code>https://flashpi.com.ec/docs/errors/&#123;code&#125;</code> with Accept-Language: es). It
+   * changes with the language, so branch on {@code code}, never on {@code type}. Format: uri.
+   * Required.
    *
    * @return the member, or null when it is null or not set
    */
@@ -224,9 +225,10 @@ public final class ProblemDetails extends FlashpiModel {
 
     /**
      * URI of the problem type: the page that documents {@code code}, in the language of the
-     * response ({@code https://flashpi.com.ec/docs/en/errors/{code}} in English, {@code
-     * https://flashpi.com.ec/docs/errors/{code}} with Accept-Language: es). It changes with the
-     * language, so branch on {@code code}, never on {@code type}. Format: uri. Null sends null.
+     * response (<code>https://flashpi.com.ec/docs/en/errors/&#123;code&#125;</code> in English,
+     * <code>https://flashpi.com.ec/docs/errors/&#123;code&#125;</code> with Accept-Language: es).
+     * It changes with the language, so branch on {@code code}, never on {@code type}. Format: uri.
+     * Null sends null.
      *
      * @param type the value
      * @return this builder

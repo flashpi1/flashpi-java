@@ -64,8 +64,8 @@ public final class CreateWebhookEndpoint extends FlashpiModel {
   }
 
   /**
-   * Event types the endpoint receives; {@code *} receives every type, including future ones.
-   * Required. Unmodifiable. A value this version of the SDK does not know reads as UNKNOWN.
+   * Event types the endpoint receives; <code>&#42;</code> receives every type, including future
+   * ones. Required. Unmodifiable. A value this version of the SDK does not know reads as UNKNOWN.
    *
    * @return the member, or null when it is null or not set
    */
@@ -76,8 +76,8 @@ public final class CreateWebhookEndpoint extends FlashpiModel {
   /**
    * {@code full} (default): the event with a snapshot of its resource in {@code data}. {@code
    * thin}: the event without {@code data}, only {@code id}, {@code type}, {@code environment} and
-   * {@code createdAt} (read the snapshot with GET /v1/events/{id}). Default: {@code "full"}. A
-   * value this version of the SDK does not know reads as UNKNOWN.
+   * {@code createdAt} (read the snapshot with GET /v1/events/&#123;id&#125;). Default: {@code
+   * "full"}. A value this version of the SDK does not know reads as UNKNOWN.
    *
    * @return the member, or null when it is null or not set
    */
@@ -113,8 +113,8 @@ public final class CreateWebhookEndpoint extends FlashpiModel {
     }
 
     /**
-     * Event types the endpoint receives; {@code *} receives every type, including future ones. Null
-     * sends null.
+     * Event types the endpoint receives; <code>&#42;</code> receives every type, including future
+     * ones. Null sends null.
      *
      * @param enabledEvents the value
      * @return this builder
@@ -126,8 +126,8 @@ public final class CreateWebhookEndpoint extends FlashpiModel {
     /**
      * {@code full} (default): the event with a snapshot of its resource in {@code data}. {@code
      * thin}: the event without {@code data}, only {@code id}, {@code type}, {@code environment} and
-     * {@code createdAt} (read the snapshot with GET /v1/events/{id}). Default: {@code "full"}. Null
-     * sends null.
+     * {@code createdAt} (read the snapshot with GET /v1/events/&#123;id&#125;). Default: {@code
+     * "full"}. Null sends null.
      *
      * @param payloadMode the value
      * @return this builder

@@ -86,7 +86,7 @@ public enum EnabledEventType {
   /** {@code account.email_resumed} */
   ACCOUNT_EMAIL_RESUMED("account.email_resumed"),
 
-  /** {@code *} */
+  /** <code>&#42;</code> */
   ALL("*"),
 
   /**

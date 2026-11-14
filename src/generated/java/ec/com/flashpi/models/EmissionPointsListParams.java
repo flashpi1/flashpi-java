@@ -9,8 +9,8 @@ import java.util.Map;
 
 /**
  * The filters of {@code emissionPointsList} (GET
- * /v1/issuers/{issuerId}/establishments/{establishmentId}/emission-points). Every member is
- * optional. Build one with {@link #builder()}.
+ * /v1/issuers/&#123;issuerId&#125;/establishments/&#123;establishmentId&#125;/emission-points).
+ * Every member is optional. Build one with {@link #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

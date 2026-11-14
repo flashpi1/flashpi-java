@@ -10,7 +10,8 @@ import java.util.Map;
 /**
  * The issuer to create, with the same fields as POST /v1/issuers (legalName, headOfficeAddress and
  * taxProfile are required for a new issuer). For a renewal ({@code existingIssuer}) the body may be
- * {@code {}}: the issuer is not changed (PATCH it if needed). Build one with {@link #builder()}.
+ * <code>&#123;&#125;</code>: the issuer is not changed (PATCH it if needed). Build one with {@link
+ * #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

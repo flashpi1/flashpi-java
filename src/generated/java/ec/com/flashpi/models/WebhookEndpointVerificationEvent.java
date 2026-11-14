@@ -10,9 +10,10 @@ import java.util.Map;
 
 /**
  * The activation handshake of an endpoint, sent when it is created, when its URL changes and on
- * POST /v1/webhook-endpoints/{id}/verify; every attempt has a new id and challenge. It is signed
- * like every webhook; answer 2xx with {@code {"challenge": "<data.challenge>"}} (or the challenge
- * as plain text). Build one with {@link #builder()}.
+ * POST /v1/webhook-endpoints/&#123;id&#125;/verify; every attempt has a new id and challenge. It is
+ * signed like every webhook; answer 2xx with <code>&#123;"challenge":
+ * "&lt;data.challenge&gt;"&#125;</code> (or the challenge as plain text). Build one with {@link
+ * #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

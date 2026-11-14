@@ -4,6 +4,7 @@
 package ec.com.flashpi.models;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 /**
  * Something that happened to a resource. The webhook body is this same object (without {@code data}
@@ -11,5 +12,6 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
  * CertificateEvent, AccountEvent, by its {@code type}; EventThin for a type this version does not
  * know: check it with instanceof.
  */
+@JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)
 public interface Event extends WebhookEvent {}

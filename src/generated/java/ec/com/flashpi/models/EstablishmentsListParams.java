@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.util.Map;
 
 /**
- * The filters of {@code establishmentsList} (GET /v1/issuers/{issuerId}/establishments). Every
- * member is optional. Build one with {@link #builder()}.
+ * The filters of {@code establishmentsList} (GET /v1/issuers/&#123;issuerId&#125;/establishments).
+ * Every member is optional. Build one with {@link #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

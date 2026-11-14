@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -62,22 +63,47 @@ public final class OpenApi {
           + "// run `java scripts/OpenApi.java generate` (or `sync`).\n";
 
   /**
-   * Names of the inline enums that several schemas share, by the place they first appear. Without
-   * an entry, an inline enum is named after its first place (schema and member, as the Python SDK).
-   * An entry for a place that is not the first of its enum fails the generation.
+   * The inline enums that several places share (the same values), by name, with every place that
+   * has them. An inline enum found in one place only is named after it (schema and member, as the
+   * Python SDK). Every shared enum needs an entry, and an entry must list exactly its places: a
+   * contract change that would share, split or rename a public enum fails the generation instead of
+   * renaming a type silently.
    */
-  static final Map<String, String> SHARED_ENUM_NAMES =
+  static final Map<String, String> SHARED_ENUMS =
       orderedMap(
-          "AccountEmailSending.environment", "Environment",
-          "CreateWebhookEndpoint.enabledEvents[]", "EnabledEventType",
-          "CreateWebhookEndpoint.payloadMode", "PayloadMode",
-          "DocumentParty.idType", "IdType",
-          "DocumentPayment.method", "PaymentMethod",
-          "DocumentRide.status", "RideStatus",
-          "DocumentTax.type", "TaxType",
-          "EventThin.type", "EventType",
-          "IssuerTaxProfile.rimpeRegime", "RimpeRegime",
-          "WebhookDelivery.status", "WebhookDeliveryStatus");
+          "Environment",
+          "AccountEmailSending.environment AccountEvent.environment Certificate.environment"
+              + " CertificateEvent.environment Document.environment DocumentEvent.environment"
+              + " EventThin.environment ProblemDetails.environment WebhookEndpoint.environment"
+              + " WebhookEndpointVerificationEvent.environment",
+          "EnabledEventType",
+          "CreateWebhookEndpoint.enabledEvents[] UpdateWebhookEndpoint.enabledEvents[]"
+              + " WebhookEndpoint.enabledEvents[]",
+          "PayloadMode",
+          "CreateWebhookEndpoint.payloadMode UpdateWebhookEndpoint.payloadMode"
+              + " WebhookDelivery.payloadMode WebhookDeliveryDetail.payloadMode"
+              + " WebhookEndpoint.payloadMode",
+          "DocumentType",
+          "Document.type WaybillSupportingDocument.type documentsList?type",
+          "DocumentStatus",
+          "Document.status ProblemDetails.documentStatus documentsList?status",
+          "IdType",
+          "DocumentParty.idType WaybillCarrier.idType WithheldSubject.idType",
+          "PaymentMethod",
+          "DocumentPayment.method WithholdingPayment.method",
+          "RideStatus",
+          "DocumentRide.status ProblemDetails.rideStatus",
+          "TaxType",
+          "DocumentTax.type DocumentTaxTotal.type",
+          "EventType",
+          "EventThin.type WebhookDelivery.eventType WebhookDeliveryDetail.eventType"
+              + " webhookEndpointsDeliveriesList?eventType eventsList?type",
+          "RimpeRegime",
+          "IssuerTaxProfile.rimpeRegime IssuerTaxProfileInput.rimpeRegime"
+              + " IssuerTaxProfilePatch.rimpeRegime",
+          "WebhookDeliveryStatus",
+          "WebhookDelivery.status WebhookDeliveryDetail.status"
+              + " webhookEndpointsDeliveriesList?status");
 
   /** Constants for enum values that are not words. */
   static final Map<String, String> SYMBOL_CONSTANTS = orderedMap("*", "ALL");
@@ -198,7 +224,58 @@ public final class OpenApi {
           "class", "additionalProperties", "additionalProperty", "builder", "build", "toBuilder");
 
   static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z][A-Za-z0-9]*");
-  static final Pattern SECRET_MEMBER = Pattern.compile("secret|password");
+
+  /** Types the generated and hand-written models use by their simple names. */
+  static final Set<String> RESERVED_TYPES =
+      Set.of(
+          "Boolean",
+          "Builder",
+          "Class",
+          "Deprecated",
+          "Double",
+          "Enum",
+          "Error",
+          "Exception",
+          "FlashpiModel",
+          "FunctionalInterface",
+          "HashMap",
+          "Integer",
+          "Iterable",
+          "JsonCreator",
+          "JsonDeserialize",
+          "JsonSerialize",
+          "JsonValue",
+          "List",
+          "LocalDate",
+          "Long",
+          "Map",
+          "Math",
+          "ModelDeserializer",
+          "ModelException",
+          "ModelRegistry",
+          "ModelSerializer",
+          "ModelType",
+          "Number",
+          "Object",
+          "OffsetDateTime",
+          "Override",
+          "Record",
+          "Runnable",
+          "SafeVarargs",
+          "Serializable",
+          "String",
+          "StringBuilder",
+          "SuppressWarnings",
+          "Supplier",
+          "System",
+          "Thread",
+          "Throwable",
+          "Types",
+          "ValueType",
+          "Void");
+
+  /** String members never shown by toString(): their names say they are secrets. */
+  static final Pattern SECRET_MEMBER = Pattern.compile("(?i).*(secret|password|token).*");
 
   public static void main(String[] args) throws Exception {
     String mode = args.length > 0 ? args[0] : "generate";
@@ -245,6 +322,7 @@ public final class OpenApi {
     for (String name : current.keySet()) {
       if (!files.containsKey(name)) {
         Files.delete(MODELS.resolve(name));
+        System.out.println("Deleted " + name + ": the contract no longer has it");
       }
     }
     for (Map.Entry<String, String> file : files.entrySet()) {
@@ -266,6 +344,11 @@ public final class OpenApi {
     }
     try (Stream<Path> paths = Files.list(MODELS)) {
       for (Path path : paths.collect(Collectors.toList())) {
+        // Only the regular .java files: not .DS_Store, folders or links.
+        if (!Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+            || !path.getFileName().toString().endsWith(".java")) {
+          continue;
+        }
         String text = Files.readString(path, StandardCharsets.UTF_8);
         if (text.startsWith(GENERATED_MARKER)) {
           files.put(path.getFileName().toString(), text);
@@ -336,6 +419,11 @@ public final class OpenApi {
           || JAVA_KEYWORDS.contains(definition.name)) {
         fail(definition.name + " is not a valid Java class name");
       }
+      if (RESERVED_TYPES.contains(definition.name)) {
+        fail(
+            definition.name
+                + " would hide a type the generated code uses: rename it in the generator");
+      }
       definitions.put(definition.name, definition);
     }
 
@@ -348,23 +436,43 @@ public final class OpenApi {
         groups.computeIfAbsent(place[2], key -> new ArrayList<>()).add(place);
       }
       Map<String, String> names = new LinkedHashMap<>();
-      Set<String> firstPlaces = new LinkedHashSet<>();
       Set<String> used = new LinkedHashSet<>(schemas.keySet());
+      Set<String> matched = new LinkedHashSet<>();
+      List<String> problems = new ArrayList<>();
       for (List<String[]> group : groups.values()) {
-        String[] first = group.get(0);
-        firstPlaces.add(first[0]);
-        String name = SHARED_ENUM_NAMES.getOrDefault(first[0], first[1]);
-        if (!used.add(name)) {
-          fail("Two enums would be named " + name + " (first at " + first[0] + ")");
-        }
+        List<String> places = new ArrayList<>();
         for (String[] place : group) {
-          names.put(place[0], name);
+          places.add(place[0]);
+        }
+        String name = group.get(0)[1];
+        if (places.size() > 1) {
+          name = null;
+          for (Map.Entry<String, String> entry : SHARED_ENUMS.entrySet()) {
+            if (entry.getValue().equals(String.join(" ", places))) {
+              name = entry.getKey();
+            }
+          }
+          if (name == null) {
+            problems.add("no SHARED_ENUMS entry lists exactly " + String.join(" ", places));
+            continue;
+          }
+          matched.add(name);
+        }
+        if (!used.add(name)) {
+          problems.add("two enums would be named " + name + " (first at " + places.get(0) + ")");
+        }
+        for (String place : places) {
+          names.put(place, name);
         }
       }
-      for (String place : SHARED_ENUM_NAMES.keySet()) {
-        if (!firstPlaces.contains(place)) {
-          fail("SHARED_ENUM_NAMES names " + place + ", which is not where an enum first appears");
+      for (String name : SHARED_ENUMS.keySet()) {
+        if (!matched.contains(name)) {
+          problems.add(
+              "SHARED_ENUMS[" + name + "] no longer matches the places that share its values");
         }
+      }
+      if (!problems.isEmpty()) {
+        fail("The shared enums changed: " + String.join("; ", problems) + ". Update SHARED_ENUMS");
       }
       return names;
     }
@@ -466,20 +574,26 @@ public final class OpenApi {
           }
           return JType.simple("String", "Types.STRING");
         case "integer":
-          Object maximum = schema.get("maximum");
-          Object minimum = schema.get("minimum");
-          boolean fitsInt =
-              maximum instanceof BigDecimal
-                  && ((BigDecimal) maximum).compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) <= 0
-                  && (!(minimum instanceof BigDecimal)
-                      || ((BigDecimal) minimum).compareTo(BigDecimal.valueOf(Integer.MIN_VALUE))
-                          >= 0);
-          // Without bounds the API sends small numbers (counts, HTTP statuses): Integer, which a
-          // builder takes from an int literal. Long only when the bounds need it.
-          if (maximum == null || fitsInt) {
-            return JType.simple("Integer", "Types.INTEGER");
+          {
+            Object integerFormat = schema.get("format");
+            if (integerFormat != null
+                && !"int32".equals(integerFormat)
+                && !"int64".equals(integerFormat)) {
+              fail(where + ": unsupported integer format " + integerFormat);
+            }
+            BigDecimal maximum = bound(schema, "maximum", "exclusiveMaximum", where);
+            BigDecimal minimum = bound(schema, "minimum", "exclusiveMinimum", where);
+            boolean fitsInt =
+                (maximum == null || maximum.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) <= 0)
+                    && (minimum == null
+                        || minimum.compareTo(BigDecimal.valueOf(Integer.MIN_VALUE)) >= 0);
+            // Without bounds the API sends small numbers (counts, HTTP statuses): Integer, which a
+            // builder takes from an int literal. Long for int64 or when the bounds need it.
+            if (!"int64".equals(integerFormat) && fitsInt) {
+              return JType.simple("Integer", "Types.INTEGER");
+            }
+            return JType.simple("Long", "Types.LONG");
           }
-          return JType.simple("Long", "Types.LONG");
         case "number":
           return JType.simple("Double", "Types.NUMBER");
         case "boolean":
@@ -497,6 +611,25 @@ public final class OpenApi {
           fail(where + ": unsupported type " + kind);
           return null;
       }
+    }
+
+    /** The larger magnitude of an inclusive and an exclusive bound, or null. */
+    BigDecimal bound(Map<String, Object> schema, String inclusive, String exclusive, String where) {
+      BigDecimal found = null;
+      for (String keyword : List.of(inclusive, exclusive)) {
+        Object value = schema.get(keyword);
+        if (value == null) {
+          continue;
+        }
+        if (!(value instanceof BigDecimal)) {
+          fail(where + ": " + keyword + " is not a number");
+        }
+        BigDecimal number = (BigDecimal) value;
+        if (found == null || number.abs().compareTo(found.abs()) > 0) {
+          found = number;
+        }
+      }
+      return found;
     }
 
     JType referenced(String name) {
@@ -534,7 +667,7 @@ public final class OpenApi {
         fail(where + ": an enum the first pass did not see");
       }
       if (!definitions.containsKey(name)) {
-        define(enumDefinition(name, describe(schema), values, place));
+        define(enumDefinition(name, markup(describe(schema)), values, place));
       }
       return JType.enumeration(name);
     }
@@ -620,7 +753,7 @@ public final class OpenApi {
       if (!missing.isEmpty()) {
         fail(where + ": required members without a schema: " + missing);
       }
-      ClassDef definition = new ClassDef(name, describe(schema));
+      ClassDef definition = new ClassDef(name, markup(describe(schema)));
       if (enumNames != null) {
         define(definition);
       }
@@ -638,7 +771,7 @@ public final class OpenApi {
                 && (SECRET_MEMBER.matcher(key).matches()
                     || "password".equals(member.get("format")));
         definition.members.add(
-            new MemberDef(key, type, describe(member), required.contains(key), secret));
+            new MemberDef(key, type, markup(describe(member)), required.contains(key), secret));
       }
     }
 
@@ -672,7 +805,7 @@ public final class OpenApi {
           values.add(asString(value, where));
         }
         if (enumNames != null) {
-          define(enumDefinition(name, describe(schema), values, name));
+          define(enumDefinition(name, markup(describe(schema)), values, name));
         }
         return;
       }
@@ -726,7 +859,7 @@ public final class OpenApi {
       if (enumNames == null) {
         return;
       }
-      UnionDef union = new UnionDef(name, describe(schema), property, members, values);
+      UnionDef union = new UnionDef(name, markup(describe(schema)), property, members, values);
       if (name.equals(EVENT_UNION)) {
         union.fallback = EVENT_FALLBACK;
         union.parent = WEBHOOK_EVENT;
@@ -775,10 +908,11 @@ public final class OpenApi {
       UnionDef union =
           new UnionDef(
               WEBHOOK_EVENT,
-              "What a webhook carries: an event (see Event) or the activation handshake of an"
-                  + " endpoint (WebhookEndpointVerificationEvent). Not in the API contract: the SDK"
-                  + " adds it. An event of a type this version of the SDK does not know is read as an"
-                  + " EventThin.",
+              markup(
+                  "What a webhook carries: an event (see Event) or the activation handshake of an"
+                      + " endpoint (WebhookEndpointVerificationEvent). Not in the API contract: the"
+                      + " SDK adds it. An event of a type this version of the SDK does not know is"
+                      + " read as an EventThin."),
               events.property,
               members,
               values);
@@ -865,13 +999,14 @@ public final class OpenApi {
           ClassDef definition =
               new ClassDef(
                   name,
-                  "The filters of `"
-                      + operationId
-                      + "` ("
-                      + method.getKey().toUpperCase(Locale.ROOT)
-                      + " "
-                      + path.getKey()
-                      + "). Every member is optional.");
+                  markup(
+                      "The filters of `"
+                          + operationId
+                          + "` ("
+                          + method.getKey().toUpperCase(Locale.ROOT)
+                          + " "
+                          + path.getKey()
+                          + "). Every member is optional."));
           for (Object raw : asList(operation.getOrDefault("parameters", List.of()), operationId)) {
             Map<String, Object> parameter = parameter(asMap(raw, operationId), operationId);
             if (!"query".equals(parameter.get("in"))) {
@@ -886,7 +1021,7 @@ public final class OpenApi {
             }
             Map<String, Object> schema = asMap(parameter.getOrDefault("schema", Map.of()), where);
             JType type = render(schema, name + upperFirst(key), operationId + "?" + key, where);
-            String doc = joinSentences(describe(parameter), describe(schema));
+            String doc = markup(joinSentences(describe(parameter), describe(schema)));
             definition.members.add(new MemberDef(key, type, doc, false, false));
           }
           if (!definition.members.isEmpty() && enumNames != null) {
@@ -973,7 +1108,7 @@ public final class OpenApi {
           out.append("  static final ValueType ").append(constantCase(union.name)).append(" =\n");
           out.append("      Types.union(\n");
           out.append("          ").append(union.name).append(".class,\n");
-          out.append("          \"").append(union.property).append("\",\n");
+          out.append("          ").append(javaString(union.property)).append(",\n");
           out.append("          ")
               .append(
                   union.fallback == null
@@ -983,9 +1118,9 @@ public final class OpenApi {
           List<String> entries = new ArrayList<>();
           for (Map.Entry<String, String> value : union.values.entrySet()) {
             entries.add(
-                "          \""
-                    + value.getKey()
-                    + "\", Types.model(() -> "
+                "          "
+                    + javaString(value.getKey())
+                    + ", Types.model(() -> "
                     + value.getValue()
                     + ".TYPE)");
           }
@@ -1089,9 +1224,9 @@ public final class OpenApi {
       out.append("          ").append(name).append(".class,\n");
       out.append("          ").append(name).append("::new");
       for (MemberDef member : members) {
-        out.append(",\n          Types.member(\"")
-            .append(member.name)
-            .append("\", ")
+        out.append(",\n          Types.member(")
+            .append(javaString(member.name))
+            .append(", ")
             .append(member.type.typeExpression)
             .append(member.secret ? ", true" : ", false")
             .append(")");
@@ -1134,7 +1269,7 @@ public final class OpenApi {
           text = "The " + member.name + ".";
         }
         out.append(
-            javadoc(text.trim() + " @return the member, or null when it is null or not set", "  "));
+            javadoc(text.trim(), "  ", "@return the member, or null when it is null or not set"));
         if (member.type.kind == JType.Kind.GENERIC) {
           out.append("  @SuppressWarnings(\"unchecked\")\n");
         }
@@ -1166,11 +1301,10 @@ public final class OpenApi {
         String text = member.doc.isEmpty() ? "Sets " + member.name + "." : member.doc;
         out.append(
             javadoc(
-                text
-                    + " Null sends null. @param "
-                    + member.name
-                    + " the value @return this builder",
-                "    "));
+                text + " Null sends null.",
+                "    ",
+                "@param " + member.name + " the value",
+                "@return this builder"));
         out.append("    public Builder ")
             .append(member.name)
             .append('(')
@@ -1219,12 +1353,12 @@ public final class OpenApi {
       List<String> lines = new ArrayList<>();
       for (String[] constant : constants) {
         lines.add(
-            javadoc("{@code " + escapeJavadoc(constant[1]) + "}", "  ")
+            javadoc(code(constant[1]), "  ")
                 + "  "
                 + constant[0]
-                + "(\""
-                + constant[1]
-                + "\")");
+                + "("
+                + javaString(constant[1])
+                + ")");
       }
       if (!ownUnknown) {
         lines.add(
@@ -1299,6 +1433,7 @@ public final class OpenApi {
     String emit(Generator generator) {
       Set<String> imports = new TreeSet<>();
       imports.add("com.fasterxml.jackson.databind.annotation.JsonDeserialize");
+      imports.add("com.fasterxml.jackson.databind.annotation.JsonSerialize");
       List<MemberDef> declared = new ArrayList<>();
       for (MemberDef member : common) {
         if (parent == null || !generator.declares(parent, member.name)) {
@@ -1318,12 +1453,12 @@ public final class OpenApi {
           (doc.isEmpty() ? name + "." : doc)
               + " One of "
               + classes
-              + ", by its {@code "
-              + property
-              + "}"
+              + ", by its "
+              + code(property)
               + (fallback == null ? "" : "; " + fallback + " for a type this version does not know")
               + ": check it with instanceof.";
       out.append(javadoc(text, ""));
+      out.append("@JsonSerialize(using = ModelSerializer.class)\n");
       out.append("@JsonDeserialize(using = ModelDeserializer.class)\n");
       out.append("public interface ").append(name);
       if (parent != null) {
@@ -1338,9 +1473,9 @@ public final class OpenApi {
         out.append("\n");
         out.append(
             javadoc(
-                (member.doc.isEmpty() ? "The " + member.name + "." : member.doc)
-                    + " @return the member",
-                "  "));
+                member.doc.isEmpty() ? "The " + member.name + "." : member.doc,
+                "  ",
+                "@return the member"));
         out.append("  ")
             .append(member.type.javaType)
             .append(' ')
@@ -1534,33 +1669,89 @@ public final class OpenApi {
         .collect(Collectors.joining(" "));
   }
 
-  /** Markdown-ish text as Javadoc: `code` spans, escaped HTML, wrapped at 100 columns. */
-  static String javadoc(String text, String indent) {
-    String body = text;
-    String tags = "";
-    int tag = indexOfTag(body);
-    if (tag >= 0) {
-      tags = body.substring(tag).trim();
-      body = body.substring(0, tag).trim();
-    }
-    StringBuilder escaped = new StringBuilder();
-    String[] spans = body.split("`", -1);
+  /**
+   * Text of the contract as safe Javadoc: `code` spans become {@code} (or {@code <code>} with HTML
+   * entities when they hold a character that could end the comment, start a tag or a Unicode
+   * escape), everything else is escaped. Generated markup is added only to what this returns.
+   */
+  static String markup(String text) {
+    StringBuilder out = new StringBuilder();
+    String[] spans = text.split("`", -1);
     for (int index = 0; index < spans.length; index++) {
-      String span = spans[index];
       boolean code = index % 2 == 1 && index < spans.length - 1;
       if (code) {
-        escaped.append("{@code ").append(escapeCode(span)).append('}');
-      } else if (span.contains("{@code ")) {
-        escaped.append(span);
+        out.append(code(spans[index]));
+      } else if (index % 2 == 1) {
+        // An unpaired backtick.
+        out.append("&#96;").append(escapeHtml(spans[index]));
       } else {
-        escaped.append(escapeJavadoc(span));
+        out.append(escapeHtml(spans[index]));
       }
     }
-    List<String> lines = new ArrayList<>(wrap(escaped.toString(), 100 - indent.length() - 3));
-    if (!tags.isEmpty()) {
+    return out.toString();
+  }
+
+  /** A code span: {@code text} when every character is harmless there, else <code>. */
+  static String code(String text) {
+    if (SAFE_CODE.matcher(text).matches()) {
+      return "{@code " + text + "}";
+    }
+    return "<code>" + escapeHtml(text) + "</code>";
+  }
+
+  /**
+   * Text as HTML, with every character that could end the comment ({@code *}), start a Unicode
+   * escape ({@code \}), a tag ({@code @}) or an inline tag (braces) written as an entity.
+   */
+  static String escapeHtml(String text) {
+    StringBuilder out = new StringBuilder();
+    for (int index = 0; index < text.length(); index++) {
+      char c = text.charAt(index);
+      switch (c) {
+        case '&':
+          out.append("&amp;");
+          break;
+        case '<':
+          out.append("&lt;");
+          break;
+        case '>':
+          out.append("&gt;");
+          break;
+        case '*':
+          out.append("&#42;");
+          break;
+        case '\\':
+          out.append("&#92;");
+          break;
+        case '@':
+          out.append("&#64;");
+          break;
+        case '{':
+          out.append("&#123;");
+          break;
+        case '}':
+          out.append("&#125;");
+          break;
+        default:
+          out.append(c < 0x20 || c == 0x7f ? ' ' : c);
+      }
+    }
+    return out.toString();
+  }
+
+  /** Characters a {@code {@code}} span shows as they are, with no way out of the comment. */
+  static final Pattern SAFE_CODE = Pattern.compile("[A-Za-z0-9 _.,:;=+\\-/()\\[\\]'\"#%|~!?$^]*");
+
+  /**
+   * A Javadoc comment of safe markup (see {@link #markup}), wrapped at 100 columns, with its block
+   * tags.
+   */
+  static String javadoc(String markup, String indent, String... tags) {
+    List<String> lines = new ArrayList<>(wrap(markup, 100 - indent.length() - 3));
+    if (tags.length > 0) {
       lines.add("");
-      for (String part : tags.split("(?= @(?:param|return) )")) {
-        lines.addAll(wrap(part.trim(), 100 - indent.length() - 3));
+      for (String tag : tags) {
+        lines.addAll(wrap(tag, 100 - indent.length() - 3));
       }
     }
     if (lines.size() == 1 && indent.length() + lines.get(0).length() + 7 <= 100) {
@@ -1573,30 +1764,22 @@ public final class OpenApi {
     return out.append(indent).append(" */\n").toString();
   }
 
-  static int indexOfTag(String text) {
-    int param = text.indexOf(" @param ");
-    int result = text.indexOf(" @return ");
-    if (param < 0) {
-      return result;
+  /**
+   * A Java string literal of any text: quotes, backslashes and characters outside ASCII escaped.
+   */
+  static String javaString(String text) {
+    StringBuilder out = new StringBuilder("\"");
+    for (int index = 0; index < text.length(); index++) {
+      char c = text.charAt(index);
+      if (c == '"' || c == '\\') {
+        out.append('\\').append(c);
+      } else if (c < 0x20 || c > 0x7e) {
+        out.append(String.format("\\u%04x", (int) c));
+      } else {
+        out.append(c);
+      }
     }
-    return result < 0 ? param : Math.min(param, result);
-  }
-
-  static String escapeJavadoc(String text) {
-    return text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("*/", "*&#47;")
-        .replaceAll("(?<!\\{)@", "&#64;")
-        .replace("\\u", "\\\\u");
-  }
-
-  static String escapeCode(String text) {
-    // Inside {@code}, braces must balance and */ must not appear.
-    String escaped = text.replace("*/", "*&#47;").replace("\\u", "\\\\u").replace("@", "&#64;");
-    long open = escaped.chars().filter(c -> c == '{').count();
-    long close = escaped.chars().filter(c -> c == '}').count();
-    return open == close ? escaped : escaped.replace("{", "&#123;").replace("}", "&#125;");
+    return out.append('"').toString();
   }
 
   static List<String> wrap(String text, int width) {
@@ -1721,7 +1904,17 @@ public final class OpenApi {
       this.text = text;
     }
 
+    /** A JSON number (RFC 8259): no plus sign, no leading zeros, digits around the point. */
+    private static final Pattern NUMBER =
+        Pattern.compile("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?");
+
+    private static final Pattern HEX4 = Pattern.compile("[0-9A-Fa-f]{4}");
+
     static Object parse(String text) {
+      if (text.startsWith("\ufeff")) {
+        throw new GenerationError(
+            "openapi.json starts with a byte order mark: save it without one");
+      }
       Json json = new Json(text);
       json.space();
       Object value = json.value();
@@ -1852,6 +2045,9 @@ public final class OpenApi {
           return out.toString();
         }
         if (c == '\\') {
+          if (at >= text.length()) {
+            error("unterminated string");
+          }
           char escape = text.charAt(at++);
           switch (escape) {
             case '"':
@@ -1875,6 +2071,9 @@ public final class OpenApi {
               out.append('\t');
               break;
             case 'u':
+              if (at + 4 > text.length() || !HEX4.matcher(text.substring(at, at + 4)).matches()) {
+                error("a \\u escape without 4 hexadecimal digits");
+              }
               out.append((char) Integer.parseInt(text.substring(at, at + 4), 16));
               at += 4;
               break;
@@ -1898,16 +2097,12 @@ public final class OpenApi {
     }
 
     private BigDecimal number() {
-      int start = at;
-      while (at < text.length() && "+-0123456789.eE".indexOf(text.charAt(at)) >= 0) {
-        at++;
-      }
-      try {
-        return new BigDecimal(text.substring(start, at));
-      } catch (NumberFormatException error) {
+      Matcher number = NUMBER.matcher(text).region(at, text.length());
+      if (!number.lookingAt()) {
         error("bad number");
-        return null;
       }
+      at = number.end();
+      return new BigDecimal(number.group());
     }
 
     private boolean peek(char c) {
