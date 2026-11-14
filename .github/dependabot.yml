@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns: ['*']
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+    groups:
+      # Jackson is the SDK's only dependency, kept apart so its updates are reviewed on their own.
+      jackson:
+        patterns: ['com.fasterxml.jackson*']
+      build-and-test:
+        patterns: ['*']
+        exclude-patterns: ['com.fasterxml.jackson*']

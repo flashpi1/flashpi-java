@@ -1,0 +1,226 @@
+name: Release
+
+# release-please keeps a release PR open with the next version and its CHANGELOG, built from the
+# Conventional Commits merged into main. Merging that PR is the approval: it tags the version,
+# creates the GitHub release, and the jobs below publish it to Maven Central.
+#
+# release-please works with a token of the organization's GitHub App (the organization variable
+# FLASHPI_BOT_CLIENT_ID and secret FLASHPI_BOT_PRIVATE_KEY). A pull request opened with
+# GITHUB_TOKEN gets its CI only after someone approves it, and checks from dispatched runs do not
+# count for the required ones; one opened with the App's token runs CI like any other.
+#
+# Maven Central (the Sonatype Central Portal) has no trusted publishing: the `maven-central`
+# environment holds the portal's user token and the GPG key that signs the files, and a
+# maintainer approves each run of the publish job before it gets them. The build job builds and
+# checks the files with a read-only token and no secret. The publish job checks out nothing and
+# runs no code of this repository or of its dependencies (no Maven, no plugin): with the runner's
+# own gpg, sha1sum, md5sum, zip, curl and jq it signs the files the build job made, bundles them
+# in the Maven layout and uploads the bundle, which Central validates and then publishes.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  MAVEN_ARGS: --batch-mode --no-transfer-progress
+
+jobs:
+  release-please:
+    name: Release PR
+    runs-on: ubuntu-24.04
+    # release-please uses the App's token, not GITHUB_TOKEN.
+    permissions: {}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      # A one-hour token for this repository only, with just what release-please needs: push the
+      # release branch, tag and release (contents), open the PR (pull requests) and label it
+      # (issues). It is revoked when the job ends.
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.FLASHPI_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLASHPI_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # CI runs on the release PR by itself. The live API test spends the demo issuer's daily quota, so
+  # it only runs on demand: start it on the release branch whenever release-please updates it.
+  live-test:
+    name: Live test on the release PR
+    needs: release-please
+    if: needs.release-please.outputs.prs_created == 'true' && needs.release-please.outputs.pr != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ fromJSON(needs.release-please.outputs.pr).headBranchName }}
+    steps:
+      - run: gh workflow run live.yml --ref "$BRANCH"
+
+  # Building runs code fetched from Maven Central (Maven and its plugins) and of this repository,
+  # so it runs here, with a read-only token and no access to the publishing secrets. The publish
+  # job only signs and uploads what this job built and checked.
+  build:
+    name: Build the release
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+      # No cache in a release build: nothing restored from a cache may reach the release. Maven is
+      # the wrapper's, pinned by its SHA-256, and every plugin is pinned in pom.xml.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build the jar, the sources and the Javadoc
+        run: ./mvnw package -DskipTests
+      - name: Check them against the tag
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: java scripts/PackageCheck.java "$TAG"
+      - name: Gather the files to publish
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          version="${TAG#v}"
+          mkdir dist
+          cp "target/flashpi-java-${version}.jar" "target/flashpi-java-${version}-sources.jar" \
+            "target/flashpi-java-${version}-javadoc.jar" dist/
+          cp pom.xml "dist/flashpi-java-${version}.pom"
+          ls -l dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          # The publish job waits for the maven-central environment's approval, for up to 30 days.
+          retention-days: 30
+
+  # The only job that gets the portal token and the GPG key (the `maven-central` environment). It
+  # checks out nothing, installs nothing and runs no code of this repository or of its
+  # dependencies: it signs the files the build job checked and uploads them.
+  publish:
+    name: Publish to Maven Central
+    needs: [release-please, build]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/artifact/ec.com.flashpi/flashpi-java
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: ${{ runner.temp }}/dist
+
+      - name: Sign the files and bundle them in the Maven layout
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          DIST: ${{ runner.temp }}/dist
+          BUNDLE: ${{ runner.temp }}/bundle
+          GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if [ -z "$GPG_PRIVATE_KEY" ] || [ -z "$GPG_PASSPHRASE" ]; then
+            echo "::error::Set MAVEN_GPG_PRIVATE_KEY and MAVEN_GPG_PASSPHRASE in the maven-central environment"
+            exit 1
+          fi
+          # Exactly the four files the build job made, and nothing else.
+          expected="flashpi-java-${version}-javadoc.jar flashpi-java-${version}-sources.jar flashpi-java-${version}.jar flashpi-java-${version}.pom"
+          found="$(cd "$DIST" && find . -mindepth 1 -printf '%P\n' | sort | tr '\n' ' ' | sed 's/ $//')"
+          if [ "$found" != "$expected" ]; then
+            echo "::error::The artifact holds ${found}, not ${expected}"
+            exit 1
+          fi
+          for file in $expected; do
+            if [ -L "$DIST/$file" ] || [ ! -f "$DIST/$file" ]; then
+              echo "::error::$file is not a regular file"
+              exit 1
+            fi
+          done
+          # A throwaway keyring, removed when the job ends.
+          export GNUPGHOME="$(mktemp -d)"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --quiet --import
+          target="$BUNDLE/ec/com/flashpi/flashpi-java/$version"
+          mkdir -p "$target"
+          for file in $expected; do
+            cp "$DIST/$file" "$target/$file"
+            printf '%s' "$GPG_PASSPHRASE" | gpg --batch --quiet --yes --pinentry-mode loopback \
+              --passphrase-fd 0 --armor --detach-sign --output "$target/$file.asc" "$target/$file"
+            gpg --batch --quiet --verify "$target/$file.asc" "$target/$file"
+            md5sum "$target/$file" | cut -d' ' -f1 > "$target/$file.md5"
+            sha1sum "$target/$file" | cut -d' ' -f1 > "$target/$file.sha1"
+          done
+          (cd "$BUNDLE" && zip -q -r -X ../bundle.zip ec)
+          ls -l "$target"
+
+      - name: Upload the bundle and wait until Central publishes it
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          BUNDLE_ZIP: ${{ runner.temp }}/bundle.zip
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CENTRAL_TOKEN_USERNAME" ] || [ -z "$CENTRAL_TOKEN_PASSWORD" ]; then
+            echo "::error::Set CENTRAL_TOKEN_USERNAME and CENTRAL_TOKEN_PASSWORD in the maven-central environment"
+            exit 1
+          fi
+          token="$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 | tr -d '\n')"
+          echo "::add-mask::$token"
+          auth="$(mktemp)"
+          trap 'rm -f "$auth"' EXIT
+          printf 'header = "Authorization: Bearer %s"\n' "$token" > "$auth"
+          # AUTOMATIC: Central publishes the version once it validates the bundle (the owner's
+          # approval of the maven-central environment is the gate).
+          deployment="$(curl --fail-with-body --silent --show-error --config "$auth" \
+            --form "bundle=@${BUNDLE_ZIP}" \
+            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=flashpi-java-${TAG#v}")"
+          echo "Deployment ${deployment}"
+          for attempt in $(seq 1 120); do
+            sleep 15
+            status="$(curl --fail-with-body --silent --show-error --config "$auth" --request POST \
+              "https://central.sonatype.com/api/v1/publisher/status?id=${deployment}")"
+            state="$(printf '%s' "$status" | jq -r .deploymentState)"
+            echo "${attempt}: ${state}"
+            case "$state" in
+              PUBLISHED)
+                exit 0 ;;
+              FAILED)
+                printf '%s' "$status" | jq .
+                exit 1 ;;
+            esac
+          done
+          echo "::error::Central has not published deployment ${deployment} after 30 minutes: see https://central.sonatype.com/publishing/deployments"
+          exit 1
