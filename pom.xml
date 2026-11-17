@@ -52,7 +52,7 @@
     <!-- Reproducible builds: a fixed timestamp for every entry of the jars. -->
     <project.build.outputTimestamp>2026-11-13T00:00:00Z</project.build.outputTimestamp>
 
-    <jackson.version>2.22.4</jackson.version>
+    <jackson.version>2.23.0</jackson.version>
     <junit.version>5.14.4</junit.version>
     <errorprone.version>2.51.0</errorprone.version>
     <google-java-format.version>1.36.1</google-java-format.version>
