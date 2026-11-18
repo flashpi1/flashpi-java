@@ -52,7 +52,9 @@ public final class WithholdingPayment extends FlashpiModel {
   }
 
   /**
-   * Amount. Required.
+   * Amount. Only the last payment may leave it out: it takes what the other payments leave of the
+   * supporting document {@code total}. With several payments none can be zero ({@code
+   * zero_payment}).
    *
    * @return the member, or null when it is null or not set
    */
@@ -77,7 +79,9 @@ public final class WithholdingPayment extends FlashpiModel {
     }
 
     /**
-     * Amount. Null sends null.
+     * Amount. Only the last payment may leave it out: it takes what the other payments leave of the
+     * supporting document {@code total}. With several payments none can be zero ({@code
+     * zero_payment}). Null sends null.
      *
      * @param amount the value
      * @return this builder

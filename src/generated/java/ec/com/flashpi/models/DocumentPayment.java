@@ -7,7 +7,10 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.util.Map;
 
-/** A payment. The payments must add up to the document total. Build one with {@link #builder()}. */
+/**
+ * A payment. The payments must add up to the document total; the last one may leave out {@code
+ * amount} to take the rest of the total. Build one with {@link #builder()}.
+ */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)
 public final class DocumentPayment extends FlashpiModel {
@@ -57,7 +60,9 @@ public final class DocumentPayment extends FlashpiModel {
   }
 
   /**
-   * Amount paid with this method. Required.
+   * Amount paid with this method. Only the last payment may leave it out: Flashpi gives it what the
+   * other payments leave of the total (the whole total when it is the only one). With several
+   * payments none can be zero ({@code zero_payment}), the computed one included.
    *
    * @return the member, or null when it is null or not set
    */
@@ -104,7 +109,9 @@ public final class DocumentPayment extends FlashpiModel {
     }
 
     /**
-     * Amount paid with this method. Null sends null.
+     * Amount paid with this method. Only the last payment may leave it out: Flashpi gives it what
+     * the other payments leave of the total (the whole total when it is the only one). With several
+     * payments none can be zero ({@code zero_payment}), the computed one included. Null sends null.
      *
      * @param amount the value
      * @return this builder
