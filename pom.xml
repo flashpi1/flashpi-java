@@ -54,7 +54,7 @@
 
     <jackson.version>2.23.0</jackson.version>
     <junit.version>5.14.4</junit.version>
-    <errorprone.version>2.51.0</errorprone.version>
+    <errorprone.version>2.52.0</errorprone.version>
     <google-java-format.version>1.36.1</google-java-format.version>
     <kotlin.version>2.4.21</kotlin.version>
     <!-- JUnit tags left out of a normal run: the live suite calls the real API. -->
@@ -170,12 +170,12 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.6.2</version>
+          <version>3.8.0</version>
         </plugin>
         <plugin>
           <groupId>com.diffplug.spotless</groupId>
           <artifactId>spotless-maven-plugin</artifactId>
-          <version>3.10.4</version>
+          <version>3.11.0</version>
         </plugin>
         <plugin>
           <groupId>com.github.spotbugs</groupId>
