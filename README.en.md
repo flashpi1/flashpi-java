@@ -96,6 +96,11 @@ The models are in `ec.com.flashpi.models` and use the API's names (`getAccessKey
 is lost; dates are `LocalDate` and `OffsetDateTime`. A value this version of the SDK does not know
 yet reads as `UNKNOWN` in the enums, and a new field is kept in `getAdditionalProperties()`.
 
+The last payment may leave out `amount`: Flashpi gives it what the other payments leave of the
+total, as in `DocumentPayment.builder().method(PaymentMethod.CASH).build()`. With several
+payments, none can be zero (`zero_payment`). See
+[Totals](https://flashpi.com.ec/docs/en/documents/#totals).
+
 The models are read and written by any Jackson 2 `ObjectMapper`, with no extra module.
 
 With the **demo issuer** you can issue in test mode without uploading a certificate: its id is on
