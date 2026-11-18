@@ -17,10 +17,14 @@ import ec.com.flashpi.models.CreatePurchaseSettlement;
 import ec.com.flashpi.models.CreateWaybill;
 import ec.com.flashpi.models.CreateWebhookEndpoint;
 import ec.com.flashpi.models.CreateWithholding;
+import ec.com.flashpi.models.DocumentPayment;
+import ec.com.flashpi.models.PaymentMethod;
 import ec.com.flashpi.models.RotateWebhookEndpointSecret;
+import ec.com.flashpi.models.SupportingDocument;
 import ec.com.flashpi.models.UpdateEstablishment;
 import ec.com.flashpi.models.UpdateIssuer;
 import ec.com.flashpi.models.UpdateWebhookEndpoint;
+import ec.com.flashpi.models.WithholdingPayment;
 import ec.com.flashpi.resources.DocumentIssuer;
 import ec.com.flashpi.resources.Resource;
 import java.lang.reflect.Method;
@@ -183,6 +187,52 @@ class OperationsTest {
     assertEquals("", http.last().bodyText());
     flashpi.documents().pdf(A);
     assertEquals("application/pdf, application/problem+json", http.last().header("accept"));
+  }
+
+  /** The API gives a last payment that leaves out its amount the rest of the total. */
+  @Test
+  void aLastPaymentWithoutItsAmountIsSentWithoutIt() {
+    FakeHttpClient http = new FakeHttpClient().always(Answer.json(200, Support.DOCUMENT));
+    Flashpi flashpi = Support.client(http);
+    flashpi
+        .invoices()
+        .create(
+            CreateInvoice.builder()
+                .issuerId(A)
+                .payments(
+                    List.of(
+                        DocumentPayment.builder()
+                            .method(PaymentMethod.CREDIT_CARD)
+                            .amount("10.00")
+                            .build(),
+                        DocumentPayment.builder().method(PaymentMethod.CASH).build()))
+                .build());
+    assertEquals(
+        "{\"issuerId\":\""
+            + A
+            + "\",\"payments\":[{\"method\":\"credit_card\",\"amount\":\"10.00\"},"
+            + "{\"method\":\"cash\"}]}",
+        http.last().bodyText());
+    flashpi
+        .withholdings()
+        .create(
+            CreateWithholding.builder()
+                .issuerId(A)
+                .supportingDocuments(
+                    List.of(
+                        SupportingDocument.builder()
+                            .payments(
+                                List.of(
+                                    WithholdingPayment.builder()
+                                        .method(PaymentMethod.CASH)
+                                        .build()))
+                            .build()))
+                .build());
+    assertEquals(
+        "{\"issuerId\":\""
+            + A
+            + "\",\"supportingDocuments\":[{\"payments\":[{\"method\":\"cash\"}]}]}",
+        http.last().bodyText());
   }
 
   @Test
