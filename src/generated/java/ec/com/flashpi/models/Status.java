@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.util.Map;
 
 /**
- * Public status of Flashpi. Placeholder until the status monitors exist. Build one with {@link
- * #builder()}.
+ * Public status of the Flashpi API. Components and SRI notices are on the status page,
+ * https://flashpi.com.ec/status. Build one with {@link #builder()}.
  */
 @JsonSerialize(using = ModelSerializer.class)
 @JsonDeserialize(using = ModelDeserializer.class)

@@ -98,6 +98,10 @@ perder decimales; las fechas son `LocalDate` y `OffsetDateTime`. Un valor que es
 aún no conoce se lee como `UNKNOWN` en los enums, y un campo nuevo queda en
 `getAdditionalProperties()`.
 
+El último pago puede ir sin `amount`: Flashpi le pone lo que los demás pagos dejan del total, como
+en `DocumentPayment.builder().method(PaymentMethod.CASH).build()`. Con varios pagos, ninguno
+puede ser cero (`zero_payment`). Más en [Totales](https://flashpi.com.ec/docs/documents/#totales).
+
 Los modelos se leen y escriben con cualquier `ObjectMapper` de Jackson 2, sin módulos extra.
 
 Con el **emisor demo** puedes emitir en pruebas sin subir un certificado: su id está en el

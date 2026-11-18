@@ -68,6 +68,9 @@ public enum FieldErrorCode {
   /** {@code amount_mismatch} */
   AMOUNT_MISMATCH("amount_mismatch"),
 
+  /** {@code zero_payment} */
+  ZERO_PAYMENT("zero_payment"),
+
   /** {@code future_date} */
   FUTURE_DATE("future_date"),
 
