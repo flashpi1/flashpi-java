@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/flashpi1/flashpi-java/compare/v0.1.0...v0.2.0) (2026-11-18)
+
+
+### Features
+
+* **models:** let the last payment leave out its amount ([3acf712](https://github.com/flashpi1/flashpi-java/commit/3acf7128d345c2d4382c07920105f9b1575d4585))
+
+
+### Dependencies
+
+* Bump com.fasterxml.jackson.core:jackson-databind ([44d40bc](https://github.com/flashpi1/flashpi-java/commit/44d40bc5d6bcf704cf22597b50232d741ed62bfc))
+
 ## 0.1.0 (2026-11-14)
 
 
