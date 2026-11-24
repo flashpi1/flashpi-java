@@ -85,6 +85,7 @@ final class ModelRegistry {
     TYPES.put(CertificateList.class, () -> Types.model(() -> CertificateList.TYPE));
     TYPES.put(CertificateRejection.class, () -> Types.model(() -> CertificateRejection.TYPE));
     TYPES.put(CertificateRevocation.class, () -> Types.model(() -> CertificateRevocation.TYPE));
+    TYPES.put(CertificateWarning.class, () -> Types.model(() -> CertificateWarning.TYPE));
     TYPES.put(CertificatesListParams.class, () -> Types.model(() -> CertificatesListParams.TYPE));
     TYPES.put(CompleteIssuerOnboarding.class, () -> Types.model(() -> CompleteIssuerOnboarding.TYPE));
     TYPES.put(CompletedIssuerOnboarding.class, () -> Types.model(() -> CompletedIssuerOnboarding.TYPE));

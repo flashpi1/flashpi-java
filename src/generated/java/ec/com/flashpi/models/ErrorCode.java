@@ -69,6 +69,9 @@ public enum ErrorCode {
   /** {@code ip_not_allowed} */
   IP_NOT_ALLOWED("ip_not_allowed"),
 
+  /** {@code live_key_required} */
+  LIVE_KEY_REQUIRED("live_key_required"),
+
   /** {@code invalid_idempotency_key} */
   INVALID_IDEMPOTENCY_KEY("invalid_idempotency_key"),
 
@@ -155,6 +158,9 @@ public enum ErrorCode {
 
   /** {@code webhook_delivery_in_progress} */
   WEBHOOK_DELIVERY_IN_PROGRESS("webhook_delivery_in_progress"),
+
+  /** {@code webhook_endpoint_limit_reached} */
+  WEBHOOK_ENDPOINT_LIMIT_REACHED("webhook_endpoint_limit_reached"),
 
   /** {@code sandbox_not_enabled} */
   SANDBOX_NOT_ENABLED("sandbox_not_enabled"),

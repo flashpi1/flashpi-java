@@ -6,6 +6,7 @@ package ec.com.flashpi.models;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,6 +38,7 @@ public final class Certificate extends FlashpiModel {
           Types.member("ruc", Types.STRING, false),
           Types.member("revocation", Types.model(() -> CertificateRevocation.TYPE), false),
           Types.member("rejection", Types.model(() -> CertificateRejection.TYPE), false),
+          Types.member("warnings", Types.list(Types.model(() -> CertificateWarning.TYPE)), false),
           Types.member("createdAt", Types.DATE_TIME, false),
           Types.member("updatedAt", Types.DATE_TIME, false));
 
@@ -197,6 +199,17 @@ public final class Certificate extends FlashpiModel {
    */
   public CertificateRejection getRejection() {
     return (CertificateRejection) get("rejection");
+  }
+
+  /**
+   * Warnings about an accepted certificate (empty when there are none). A test certificate that is
+   * not for the issuer's RUC is accepted with {@code ruc_mismatch}. Required. Unmodifiable.
+   *
+   * @return the member, or null when it is null or not set
+   */
+  @SuppressWarnings("unchecked")
+  public List<CertificateWarning> getWarnings() {
+    return (List<CertificateWarning>) get("warnings");
   }
 
   /**
@@ -375,6 +388,17 @@ public final class Certificate extends FlashpiModel {
      */
     public Builder rejection(CertificateRejection rejection) {
       return set("rejection", rejection);
+    }
+
+    /**
+     * Warnings about an accepted certificate (empty when there are none). A test certificate that
+     * is not for the issuer's RUC is accepted with {@code ruc_mismatch}. Null sends null.
+     *
+     * @param warnings the value
+     * @return this builder
+     */
+    public Builder warnings(List<CertificateWarning> warnings) {
+      return set("warnings", Types.copyList(warnings));
     }
 
     /**

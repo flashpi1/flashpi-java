@@ -26,6 +26,9 @@ public enum DocumentFailureCode {
   /** {@code certificate_unusable} */
   CERTIFICATE_UNUSABLE("certificate_unusable"),
 
+  /** {@code certificate_ruc_mismatch} */
+  CERTIFICATE_RUC_MISMATCH("certificate_ruc_mismatch"),
+
   /** {@code document_too_large} */
   DOCUMENT_TOO_LARGE("document_too_large"),
 
@@ -46,6 +49,9 @@ public enum DocumentFailureCode {
 
   /** {@code sri_environment_mismatch} */
   SRI_ENVIRONMENT_MISMATCH("sri_environment_mismatch"),
+
+  /** {@code sri_authorization_mismatch} */
+  SRI_AUTHORIZATION_MISMATCH("sri_authorization_mismatch"),
 
   /**
    * A value this version of the SDK does not know: update the SDK to read it. It cannot be sent.

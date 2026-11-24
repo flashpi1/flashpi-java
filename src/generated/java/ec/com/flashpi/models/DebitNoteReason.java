@@ -44,7 +44,8 @@ public final class DebitNoteReason extends FlashpiModel {
   }
 
   /**
-   * Reason. Required.
+   * Reason. With the shared demo issuer at most 291 characters (422
+   * demo_issuer_description_too_long): Flashpi starts it with "PRUEBA - ". Required.
    *
    * @return the member, or null when it is null or not set
    */
@@ -78,7 +79,8 @@ public final class DebitNoteReason extends FlashpiModel {
     }
 
     /**
-     * Reason. Null sends null.
+     * Reason. With the shared demo issuer at most 291 characters (422
+     * demo_issuer_description_too_long): Flashpi starts it with "PRUEBA - ". Null sends null.
      *
      * @param description the value
      * @return this builder
