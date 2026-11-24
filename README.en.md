@@ -253,18 +253,18 @@ try {
 }
 ```
 
-| Class                          | Status | Examples of `code`                                          |
-| ------------------------------ | ------ | ----------------------------------------------------------- |
-| `BadRequestException`          | 400    | `malformed_json`, `invalid_idempotency_key`                 |
-| `AuthenticationException`      | 401    | `authentication_required`, `invalid_api_key`                |
-| `PermissionDeniedException`    | 403    | `key_read_only`, `key_scope_mismatch`, `ip_not_allowed`     |
-| `NotFoundException`            | 404    | `not_found`                                                 |
-| `ConflictException`            | 409    | `sequential_already_used`, `ride_not_available`             |
-| `UnprocessableEntityException` | 422    | `validation_failed`, `total_mismatch`                       |
-| `RateLimitException`           | 429    | `demo_issuer_quota_exceeded`, `account_email_limit_reached` |
-| `InternalServerException`      | 5xx    | `internal_error`, `demo_issuer_unavailable`                 |
-| `ApiException`                 | others | `payload_too_large` (413), `unsupported_media_type` (415)   |
-| `ApiConnectionException`       | —      | no answer (network); `ApiTimeoutException` when it timed out |
+| Class                          | Status | Examples of `code`                                                                |
+| ------------------------------ | ------ | --------------------------------------------------------------------------------- |
+| `BadRequestException`          | 400    | `malformed_json`, `invalid_idempotency_key`                                       |
+| `AuthenticationException`      | 401    | `authentication_required`, `invalid_api_key`                                      |
+| `PermissionDeniedException`    | 403    | `key_read_only`, `key_scope_mismatch`, `ip_not_allowed`, `live_key_required`      |
+| `NotFoundException`            | 404    | `not_found`                                                                       |
+| `ConflictException`            | 409    | `sequential_already_used`, `ride_not_available`, `webhook_endpoint_limit_reached` |
+| `UnprocessableEntityException` | 422    | `validation_failed`, `total_mismatch`                                             |
+| `RateLimitException`           | 429    | `demo_issuer_quota_exceeded`, `account_email_limit_reached`                       |
+| `InternalServerException`      | 5xx    | `internal_error`, `demo_issuer_unavailable`                                       |
+| `ApiException`                 | others | `payload_too_large` (413), `unsupported_media_type` (415)                         |
+| `ApiConnectionException`       | —      | no answer (network); `ApiTimeoutException` when it timed out                      |
 
 All of them are in `ec.com.flashpi.exceptions` and extend `FlashpiException`. Some errors carry
 extra data in `getProblem()`, for example `getDocumentId()`, `getLimit()`, `getResetsAt()` or
@@ -383,7 +383,9 @@ the `thin` mode (no `data`), fetch the whole event with `flashpi.events().get(ev
 
 ## Issuers and certificates
 
-These operations need an account-scoped key with read and write access.
+These operations need an account-scoped key with read and write access. Once the issuer has live
+documents, changing it (its establishments and emission points too) or renewing its signature
+needs an `fp_live_` key: with an `fp_test_` one the API answers 403 `live_key_required`.
 
 An issuer starts from its electronic signature (.p12): Flashpi checks it, reads the RUC and asks
 the SRI, and gives you a `prefill` with what it found so you can build the issuer.
@@ -467,6 +469,10 @@ To **renew an issuer's signature**, for test and live at once, run the same flow
 .p12: Flashpi recognizes the RUC (`getExistingIssuer()`) and `complete()` without a body adds the
 certificate. `flashpi.issuers().certificates().upload(issuerId, upload)` instead uploads a
 certificate only for the mode of the key you use (test or live).
+
+An accepted certificate lists in `getWarnings()` what to fix that does not stop it signing: a test
+certificate that is not for the issuer's RUC is accepted with `ruc_mismatch` and signs test
+documents only.
 
 ## Options
 
