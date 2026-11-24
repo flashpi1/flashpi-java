@@ -151,7 +151,8 @@ public final class ProblemDetails extends FlashpiModel {
 
   /**
    * The daily limit that was reached ({@code email_resend_limit_reached}, {@code
-   * account_email_limit_reached}, {@code demo_issuer_quota_exceeded}).
+   * account_email_limit_reached}, {@code demo_issuer_quota_exceeded}), or the most webhook
+   * endpoints an account may have in a mode ({@code webhook_endpoint_limit_reached}).
    *
    * @return the member, or null when it is null or not set
    */
@@ -322,7 +323,9 @@ public final class ProblemDetails extends FlashpiModel {
 
     /**
      * The daily limit that was reached ({@code email_resend_limit_reached}, {@code
-     * account_email_limit_reached}, {@code demo_issuer_quota_exceeded}). Null sends null.
+     * account_email_limit_reached}, {@code demo_issuer_quota_exceeded}), or the most webhook
+     * endpoints an account may have in a mode ({@code webhook_endpoint_limit_reached}). Null sends
+     * null.
      *
      * @param limit the value
      * @return this builder

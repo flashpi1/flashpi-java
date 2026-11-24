@@ -107,8 +107,17 @@ public enum FieldErrorCode {
   /** {@code demo_issuer_sequential_not_allowed} */
   DEMO_ISSUER_SEQUENTIAL_NOT_ALLOWED("demo_issuer_sequential_not_allowed"),
 
+  /** {@code demo_issuer_free_text_not_allowed} */
+  DEMO_ISSUER_FREE_TEXT_NOT_ALLOWED("demo_issuer_free_text_not_allowed"),
+
+  /** {@code demo_issuer_description_too_long} */
+  DEMO_ISSUER_DESCRIPTION_TOO_LONG("demo_issuer_description_too_long"),
+
   /** {@code ruc_mismatch} */
   RUC_MISMATCH("ruc_mismatch"),
+
+  /** {@code certificate_ruc_missing} */
+  CERTIFICATE_RUC_MISSING("certificate_ruc_missing"),
 
   /**
    * A value this version of the SDK does not know: update the SDK to read it. It cannot be sent.
