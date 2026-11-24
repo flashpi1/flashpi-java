@@ -15,14 +15,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ec.com.flashpi.FakeHttpClient.Answer;
 import ec.com.flashpi.models.AccountEvent;
+import ec.com.flashpi.models.Certificate;
+import ec.com.flashpi.models.CertificateWarning;
+import ec.com.flashpi.models.CertificateWarningCode;
 import ec.com.flashpi.models.CreateInvoice;
+import ec.com.flashpi.models.DocumentFailureCode;
 import ec.com.flashpi.models.DocumentItem;
 import ec.com.flashpi.models.DocumentStatus;
 import ec.com.flashpi.models.EnabledEventType;
 import ec.com.flashpi.models.ErrorCode;
 import ec.com.flashpi.models.Event;
 import ec.com.flashpi.models.EventThin;
+import ec.com.flashpi.models.FieldErrorCode;
 import ec.com.flashpi.models.FlashpiModel;
 import ec.com.flashpi.models.IssuerOnboardingSriProfileRimpeRegime;
 import ec.com.flashpi.models.IssuerTaxProfilePatch;
@@ -317,6 +323,56 @@ class ModelsTest {
     assertEquals(
         IssuerOnboardingSriProfileRimpeRegime.UNKNOWN,
         IssuerOnboardingSriProfileRimpeRegime.fromValue("other"));
+  }
+
+  @Test
+  void theCodesTheApiAddedMapToTheirConstantsNotToUnknown() throws Exception {
+    assertEquals(ErrorCode.LIVE_KEY_REQUIRED, ErrorCode.fromValue("live_key_required"));
+    assertEquals(
+        ErrorCode.WEBHOOK_ENDPOINT_LIMIT_REACHED,
+        ErrorCode.fromValue("webhook_endpoint_limit_reached"));
+    assertEquals(
+        FieldErrorCode.CERTIFICATE_RUC_MISSING,
+        FieldErrorCode.fromValue("certificate_ruc_missing"));
+    assertEquals(
+        FieldErrorCode.DEMO_ISSUER_DESCRIPTION_TOO_LONG,
+        FieldErrorCode.fromValue("demo_issuer_description_too_long"));
+    assertEquals(
+        FieldErrorCode.DEMO_ISSUER_FREE_TEXT_NOT_ALLOWED,
+        FieldErrorCode.fromValue("demo_issuer_free_text_not_allowed"));
+    assertEquals(
+        CertificateWarningCode.RUC_MISMATCH, CertificateWarningCode.fromValue("ruc_mismatch"));
+    for (DocumentFailureCode code :
+        List.of(
+            DocumentFailureCode.CERTIFICATE_RUC_MISMATCH,
+            DocumentFailureCode.SRI_AUTHORIZATION_MISMATCH)) {
+      String json = "{\"failure\":{\"code\":\"" + code.value() + "\",\"message\":\"m\"}}";
+      ec.com.flashpi.models.Document document =
+          MAPPER.readValue(json, ec.com.flashpi.models.Document.class);
+      assertEquals(code, document.getFailure().getCode());
+      assertEquals(json, MAPPER.writeValueAsString(document));
+    }
+  }
+
+  @Test
+  void readsTheWarningsOfACertificate() throws Exception {
+    String certificate =
+        "{\"id\":\"cert\",\"issuerId\":\"issuer\",\"environment\":\"test\",\"status\":\"accepted\","
+            + "\"usable\":true,\"ruc\":\"1790000000001\",\"warnings\":["
+            + "{\"code\":\"ruc_mismatch\",\"message\":\"This certificate is not for the issuer's RUC\"},"
+            + "{\"code\":\"expires_soon\",\"message\":\"m\"}]}";
+    FakeHttpClient http = new FakeHttpClient().then(Answer.json(200, certificate));
+    Certificate read = Support.client(http).issuers().certificates().get("issuer", "cert");
+    assertEquals(2, read.getWarnings().size());
+    CertificateWarning warning = read.getWarnings().get(0);
+    assertEquals(CertificateWarningCode.RUC_MISMATCH, warning.getCode());
+    assertEquals("This certificate is not for the issuer's RUC", warning.getMessage());
+    // A warning this version does not know reads as UNKNOWN and keeps its value and message.
+    assertEquals(CertificateWarningCode.UNKNOWN, read.getWarnings().get(1).getCode());
+    assertEquals("m", read.getWarnings().get(1).getMessage());
+    assertTrue(read.getAdditionalProperties().isEmpty());
+    assertEquals(MAPPER.readTree(certificate), MAPPER.valueToTree(read));
+    assertEquals(List.of(), MAPPER.readValue("{\"warnings\":[]}", Certificate.class).getWarnings());
   }
 
   @Test

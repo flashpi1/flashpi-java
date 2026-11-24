@@ -17,8 +17,13 @@ import ec.com.flashpi.exceptions.PermissionDeniedException;
 import ec.com.flashpi.exceptions.RateLimitException;
 import ec.com.flashpi.exceptions.UnprocessableEntityException;
 import ec.com.flashpi.internal.RetryAfter;
+import ec.com.flashpi.models.CreateInvoice;
+import ec.com.flashpi.models.CreateWebhookEndpoint;
 import ec.com.flashpi.models.ErrorCode;
+import ec.com.flashpi.models.FieldError;
 import ec.com.flashpi.models.FieldErrorCode;
+import ec.com.flashpi.models.UpdateIssuer;
+import ec.com.flashpi.models.UpdateWebhookEndpoint;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
@@ -27,6 +32,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class ErrorsTest {
@@ -81,6 +87,79 @@ class ErrorsTest {
     assertEquals(422.0, error.getProblem().getStatus());
     assertEquals(Map.of("extra", 1), error.getProblem().getAdditionalProperties());
     assertNull(error.getIdempotencyKey());
+  }
+
+  @Test
+  void readsTheErrorCodesTheApiAdded() {
+    FakeHttpClient http =
+        new FakeHttpClient()
+            .then(Answer.problem(403, "live_key_required"))
+            .then(
+                Answer.json(
+                    409,
+                    "{\"status\":409,\"code\":\"webhook_endpoint_limit_reached\",\"limit\":20}"))
+            .then(
+                Answer.json(
+                    422,
+                    "{\"status\":422,\"code\":\"validation_failed\",\"errors\":["
+                        + "{\"field\":\"additionalInfo\",\"code\":\"demo_issuer_free_text_not_allowed\",\"message\":\"m\"},"
+                        + "{\"field\":\"items[0].description\",\"code\":\"demo_issuer_description_too_long\",\"message\":\"m\"},"
+                        + "{\"field\":\"file\",\"code\":\"certificate_ruc_missing\",\"message\":\"m\"}]}"));
+    Flashpi flashpi = Support.client(http);
+
+    PermissionDeniedException denied =
+        assertThrows(
+            PermissionDeniedException.class,
+            () -> flashpi.issuers().update("issuer", UpdateIssuer.builder().build()));
+    assertEquals("live_key_required", denied.getCode());
+    assertEquals(ErrorCode.LIVE_KEY_REQUIRED, denied.getProblem().getCode());
+
+    ConflictException full =
+        assertThrows(
+            ConflictException.class,
+            () ->
+                flashpi
+                    .webhookEndpoints()
+                    .create(
+                        CreateWebhookEndpoint.builder().url("https://example.com/hook").build()));
+    assertEquals(ErrorCode.WEBHOOK_ENDPOINT_LIMIT_REACHED, full.getProblem().getCode());
+    assertEquals(20, full.getProblem().getLimit());
+
+    UnprocessableEntityException invalid =
+        assertThrows(
+            UnprocessableEntityException.class,
+            () -> flashpi.invoices().create(CreateInvoice.builder().issuerId("demo").build()));
+    assertEquals(
+        List.of(
+            FieldErrorCode.DEMO_ISSUER_FREE_TEXT_NOT_ALLOWED,
+            FieldErrorCode.DEMO_ISSUER_DESCRIPTION_TOO_LONG,
+            FieldErrorCode.CERTIFICATE_RUC_MISSING),
+        invalid.getErrors().stream().map(FieldError::getCode).collect(Collectors.toList()));
+    assertEquals(3, http.requests.size());
+  }
+
+  @Test
+  void theHourlyVerificationLimitOfAWebhookEndpointIsARateLimit() {
+    FakeHttpClient http =
+        new FakeHttpClient()
+            .always(Answer.problem(429, "rate_limited").header("retry-after", "1800"));
+    Flashpi flashpi = Support.client(http);
+    RateLimitException verify =
+        assertThrows(RateLimitException.class, () -> flashpi.webhookEndpoints().verify("we_1"));
+    assertEquals(ErrorCode.RATE_LIMITED, verify.getProblem().getCode());
+    assertEquals(Duration.ofMinutes(30), verify.getRetryAfter());
+    RateLimitException update =
+        assertThrows(
+            RateLimitException.class,
+            () ->
+                flashpi
+                    .webhookEndpoints()
+                    .update(
+                        "we_1",
+                        UpdateWebhookEndpoint.builder().url("https://example.com/new").build()));
+    assertEquals(ErrorCode.RATE_LIMITED, update.getProblem().getCode());
+    // Longer than 60 seconds: thrown at once, not retried.
+    assertEquals(2, http.requests.size());
   }
 
   @Test
