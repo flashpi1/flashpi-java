@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/flashpi1/flashpi-java/compare/v0.2.0...v0.2.1) (2026-11-25)
+
+
+### Bug fixes
+
+* **models:** read certificate warnings and the API's new codes ([8c1d665](https://github.com/flashpi1/flashpi-java/commit/8c1d665e036ffd1970edf9d0061ba21f3a6edcf8))
+
 ## [0.2.0](https://github.com/flashpi1/flashpi-java/compare/v0.1.0...v0.2.0) (2026-11-18)
 
 
