@@ -3,7 +3,10 @@ package ec.com.flashpi.exceptions;
 import java.util.List;
 import java.util.Map;
 
-/** 403: the key may not do this (read-only, another issuer, IP allowlist, suspended account). */
+/**
+ * 403: the key may not do this (read-only, another issuer, IP allowlist, suspended account, or a
+ * test key on an issuer that has live documents).
+ */
 public class PermissionDeniedException extends ApiException {
   private static final long serialVersionUID = 1L;
 

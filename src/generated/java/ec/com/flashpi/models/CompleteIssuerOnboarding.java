@@ -52,9 +52,10 @@ public final class CompleteIssuerOnboarding extends FlashpiModel {
   }
 
   /**
-   * Required when the RUC did not come from the certificate ({@code rucNeedsConfirmation}): the
-   * proposed RUC or another one whose first 10 digits are the holder's cédula. Otherwise it may be
-   * left out, and must be the certificate's RUC when sent (422 {@code ruc_mismatch}).
+   * Required when the RUC did not come from the certificate ({@code rucNeedsConfirmation}), and
+   * then it must be the proposed RUC (for a certificate that states only a cédula, that cédula
+   * followed by 001). Otherwise it may be left out, and must be the certificate's RUC when sent.
+   * Any other RUC gets 422 {@code ruc_mismatch}.
    *
    * @return the member, or null when it is null or not set
    */
@@ -123,10 +124,10 @@ public final class CompleteIssuerOnboarding extends FlashpiModel {
     }
 
     /**
-     * Required when the RUC did not come from the certificate ({@code rucNeedsConfirmation}): the
-     * proposed RUC or another one whose first 10 digits are the holder's cédula. Otherwise it may
-     * be left out, and must be the certificate's RUC when sent (422 {@code ruc_mismatch}). Null
-     * sends null.
+     * Required when the RUC did not come from the certificate ({@code rucNeedsConfirmation}), and
+     * then it must be the proposed RUC (for a certificate that states only a cédula, that cédula
+     * followed by 001). Otherwise it may be left out, and must be the certificate's RUC when sent.
+     * Any other RUC gets 422 {@code ruc_mismatch}. Null sends null.
      *
      * @param ruc the value
      * @return this builder
