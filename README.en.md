@@ -26,14 +26,14 @@ Maven:
 <dependency>
   <groupId>ec.com.flashpi</groupId>
   <artifactId>flashpi-java</artifactId>
-  <version>0.2.0</version> <!-- x-release-please-version -->
+  <version>0.2.1</version> <!-- x-release-please-version -->
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("ec.com.flashpi:flashpi-java:0.2.0") // x-release-please-version
+implementation("ec.com.flashpi:flashpi-java:0.2.1") // x-release-please-version
 ```
 
 ## Getting started
