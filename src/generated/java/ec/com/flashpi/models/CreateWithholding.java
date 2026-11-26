@@ -105,7 +105,9 @@ public final class CreateWithholding extends FlashpiModel {
   /**
    * Additional information printed on the document (name → value, 1 to 300 characters each). A
    * document carries at most 15 fields including the legends Flashpi adds (RUC Proveedor, and Gran
-   * Contribuyente for large taxpayers), so at most 13 or 14 of yours. Unmodifiable.
+   * Contribuyente for large taxpayers), so at most 13 or 14 of yours. Not accepted with the shared
+   * demo issuer (422 demo_issuer_free_text_not_allowed), whose documents carry only the legend
+   * "Aviso: DOCUMENTO DE PRUEBA SIN VALIDEZ TRIBUTARIA - SANDBOX FLASHPI". Unmodifiable.
    *
    * @return the member, or null when it is null or not set
    */
@@ -223,7 +225,10 @@ public final class CreateWithholding extends FlashpiModel {
     /**
      * Additional information printed on the document (name → value, 1 to 300 characters each). A
      * document carries at most 15 fields including the legends Flashpi adds (RUC Proveedor, and
-     * Gran Contribuyente for large taxpayers), so at most 13 or 14 of yours. Null sends null.
+     * Gran Contribuyente for large taxpayers), so at most 13 or 14 of yours. Not accepted with the
+     * shared demo issuer (422 demo_issuer_free_text_not_allowed), whose documents carry only the
+     * legend "Aviso: DOCUMENTO DE PRUEBA SIN VALIDEZ TRIBUTARIA - SANDBOX FLASHPI". Null sends
+     * null.
      *
      * @param additionalInfo the value
      * @return this builder

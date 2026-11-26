@@ -71,7 +71,8 @@ public final class DocumentItem extends FlashpiModel {
   }
 
   /**
-   * Description. Required.
+   * Description. With the shared demo issuer at most 291 characters (422
+   * demo_issuer_description_too_long): Flashpi starts it with "PRUEBA - ". Required.
    *
    * @return the member, or null when it is null or not set
    */
@@ -126,7 +127,8 @@ public final class DocumentItem extends FlashpiModel {
   }
 
   /**
-   * Up to 3 extra details printed with the line (name → value, 1 to 300 characters). Unmodifiable.
+   * Up to 3 extra details printed with the line (name → value, 1 to 300 characters). Not accepted
+   * with the shared demo issuer (422 demo_issuer_free_text_not_allowed). Unmodifiable.
    *
    * @return the member, or null when it is null or not set
    */
@@ -162,7 +164,8 @@ public final class DocumentItem extends FlashpiModel {
     }
 
     /**
-     * Description. Null sends null.
+     * Description. With the shared demo issuer at most 291 characters (422
+     * demo_issuer_description_too_long): Flashpi starts it with "PRUEBA - ". Null sends null.
      *
      * @param description the value
      * @return this builder
@@ -223,8 +226,8 @@ public final class DocumentItem extends FlashpiModel {
     }
 
     /**
-     * Up to 3 extra details printed with the line (name → value, 1 to 300 characters). Null sends
-     * null.
+     * Up to 3 extra details printed with the line (name → value, 1 to 300 characters). Not accepted
+     * with the shared demo issuer (422 demo_issuer_free_text_not_allowed). Null sends null.
      *
      * @param additionalDetails the value
      * @return this builder

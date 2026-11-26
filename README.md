@@ -27,14 +27,14 @@ Maven:
 <dependency>
   <groupId>ec.com.flashpi</groupId>
   <artifactId>flashpi-java</artifactId>
-  <version>0.2.0</version> <!-- x-release-please-version -->
+  <version>0.2.1</version> <!-- x-release-please-version -->
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("ec.com.flashpi:flashpi-java:0.2.0") // x-release-please-version
+implementation("ec.com.flashpi:flashpi-java:0.2.1") // x-release-please-version
 ```
 
 ## Primeros pasos
@@ -256,18 +256,18 @@ try {
 }
 ```
 
-| Clase                          | Estado | Ejemplos de `code`                                          |
-| ------------------------------ | ------ | ----------------------------------------------------------- |
-| `BadRequestException`          | 400    | `malformed_json`, `invalid_idempotency_key`                 |
-| `AuthenticationException`      | 401    | `authentication_required`, `invalid_api_key`                |
-| `PermissionDeniedException`    | 403    | `key_read_only`, `key_scope_mismatch`, `ip_not_allowed`     |
-| `NotFoundException`            | 404    | `not_found`                                                 |
-| `ConflictException`            | 409    | `sequential_already_used`, `ride_not_available`             |
-| `UnprocessableEntityException` | 422    | `validation_failed`, `total_mismatch`                       |
-| `RateLimitException`           | 429    | `demo_issuer_quota_exceeded`, `account_email_limit_reached` |
-| `InternalServerException`      | 5xx    | `internal_error`, `demo_issuer_unavailable`                 |
-| `ApiException`                 | otros  | `payload_too_large` (413), `unsupported_media_type` (415)   |
-| `ApiConnectionException`       | —      | sin respuesta (red); `ApiTimeoutException` si se agotó el plazo |
+| Clase                          | Estado | Ejemplos de `code`                                                                |
+| ------------------------------ | ------ | --------------------------------------------------------------------------------- |
+| `BadRequestException`          | 400    | `malformed_json`, `invalid_idempotency_key`                                       |
+| `AuthenticationException`      | 401    | `authentication_required`, `invalid_api_key`                                      |
+| `PermissionDeniedException`    | 403    | `key_read_only`, `key_scope_mismatch`, `ip_not_allowed`, `live_key_required`      |
+| `NotFoundException`            | 404    | `not_found`                                                                       |
+| `ConflictException`            | 409    | `sequential_already_used`, `ride_not_available`, `webhook_endpoint_limit_reached` |
+| `UnprocessableEntityException` | 422    | `validation_failed`, `total_mismatch`                                             |
+| `RateLimitException`           | 429    | `demo_issuer_quota_exceeded`, `account_email_limit_reached`                       |
+| `InternalServerException`      | 5xx    | `internal_error`, `demo_issuer_unavailable`                                       |
+| `ApiException`                 | otros  | `payload_too_large` (413), `unsupported_media_type` (415)                         |
+| `ApiConnectionException`       | —      | sin respuesta (red); `ApiTimeoutException` si se agotó el plazo                   |
 
 Todas están en `ec.com.flashpi.exceptions` y derivan de `FlashpiException`. Algunos errores traen
 datos extra en `getProblem()`, por ejemplo `getDocumentId()`, `getLimit()`, `getResetsAt()` o
@@ -389,7 +389,10 @@ los dos sirve. Un evento de un tipo que esta versión del SDK aún no conoce lle
 
 ## Emisores y certificados
 
-Estas operaciones necesitan una clave de toda la cuenta con acceso de lectura y escritura.
+Estas operaciones necesitan una clave de toda la cuenta con acceso de lectura y escritura. Cuando
+el emisor ya tiene comprobantes de producción, cambiarlo (también sus establecimientos y puntos
+de emisión) o renovar su firma pide una clave `fp_live_`: con una `fp_test_` la API responde 403
+`live_key_required`.
 
 Un emisor nace de su firma electrónica (.p12): Flashpi la verifica, lee el RUC y consulta al SRI,
 y te devuelve un `prefill` con lo que encontró para que armes el emisor.
@@ -473,6 +476,10 @@ Para **renovar la firma** de un emisor, para pruebas y producción a la vez, rep
 flujo con el .p12 nuevo: Flashpi reconoce el RUC (`getExistingIssuer()`) y `complete()` sin datos
 agrega el certificado. En cambio, `flashpi.issuers().certificates().upload(issuerId, upload)`
 sube un certificado solo para el modo de la clave que usas (pruebas o producción).
+
+Un certificado aceptado trae en `getWarnings()` lo que conviene corregir aunque no le impide
+firmar: un certificado de pruebas que no es del RUC del emisor se acepta con `ruc_mismatch` y
+firma solo comprobantes de prueba.
 
 ## Opciones
 
